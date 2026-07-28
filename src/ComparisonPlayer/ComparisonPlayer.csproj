@@ -12,6 +12,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>ComparisonPlayer</AssemblyName>
     <RootNamespace>ComparisonPlayer</RootNamespace>
+    <!-- Версия поставки: её же берут tools/publish.ps1 (имя архива) и инсталлятор -->
+    <Version>1.0.0</Version>
+    <Product>ComparisonVideoPlayer</Product>
+    <Description>Покадровое сравнение двух видео</Description>
+    <Company>ComparisonVideoPlayer</Company>
+    <Copyright>© 2026</Copyright>
     <!-- Иконка exe; генерируется из docs/app-icon.svg через tools/make-app-icon.ps1 -->
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>

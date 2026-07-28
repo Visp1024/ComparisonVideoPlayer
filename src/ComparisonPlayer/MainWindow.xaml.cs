@@ -114,6 +114,12 @@ public partial class MainWindow : Window
                 e.Handled = HandleKey(e.Key == Key.System ? e.SystemKey : e.Key);
             }));
 
+        // Колесо (фаза 5) приходится ловить тем же способом и по той же причине:
+        // над кадром его перехватывают окна вывода FlyleafHost, поэтому берём событие
+        // в любом окне приложения и даже уже помеченное обработанным.
+        EventManager.RegisterClassHandler(typeof(Window), Mouse.PreviewMouseWheelEvent,
+            new MouseWheelEventHandler(OnAnyWheel), true);
+
         DragOver += OnDragOver;
         Drop += (s, e) => OnDrop(s, e, _active);
     }
@@ -144,14 +150,24 @@ public partial class MainWindow : Window
             : "файл не открыт");
 
         if (App.StartupFile is { } file)
+        {
             OpenFile(_a, file);
 
-        if (App.StartupFileB is { } second)
-            OpenFile(_b, second);
+            if (App.StartupFileB is { } second)
+                OpenFile(_b, second);
+
+            return;
+        }
+
+        // Файлы из командной строки сильнее сессии: их открыли осознанно именно сейчас.
+        RestoreLastSession();
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        StopShuttle();
+        SaveLastSession();
+
         App.Settings.ShowOverlay = _showOsd;
         App.Settings.LoopSegment = _loop;
         App.Settings.SnapToFrames = Timeline.SnapEnabled;
@@ -170,29 +186,74 @@ public partial class MainWindow : Window
     private void OpenB_Click(object sender, RoutedEventArgs e) => OpenWithDialog(_b);
     private void Close_Click(object sender, RoutedEventArgs e) => CloseFile(Active);
     private void PlayPause_Click(object sender, RoutedEventArgs e) => TogglePlayPause();
-    private void StepNext_Click(object sender, RoutedEventArgs e) => _sync.StepForward();
-    private void StepPrev_Click(object sender, RoutedEventArgs e) => _sync.StepBack();
-    private void ToStart_Click(object sender, RoutedEventArgs e) => SeekFrame(_sync.SegmentInFrame);
+    private void StepNext_Click(object sender, RoutedEventArgs e) => StepBy(StepSize);
+    private void StepPrev_Click(object sender, RoutedEventArgs e) => StepBy(-StepSize);
+    private void ShuttleBack_Click(object sender, RoutedEventArgs e) => ShuttleBack();
+    private void ShuttleForward_Click(object sender, RoutedEventArgs e) => ShuttleForward();
     private void Info_Click(object sender, RoutedEventArgs e) => ToggleSide(SideMode.Info);
     private void Cache_Click(object sender, RoutedEventArgs e) => ToggleSide(SideMode.Cache);
     private void SideClose_Click(object sender, RoutedEventArgs e) => ToggleSide(_side);
     private void Layout_Click(object sender, RoutedEventArgs e) => CycleLayout();
     private void Master_Click(object sender, RoutedEventArgs e) => MakeActiveMaster();
+    private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings();
 
-    /// <summary>
-    /// Воспроизведение всегда идёт внутри отрезка мастера: запуск с кадра вне его
-    /// начинается с начала отрезка, иначе кнопка «play» на отрезанном хвосте не
-    /// делала бы ничего.
-    /// </summary>
+    private void ToStart_Click(object sender, RoutedEventArgs e)
+    {
+        StopShuttle();
+        SeekFrame(_sync.SegmentInFrame);
+    }
+
+    /// <summary>Меню сессии открываем нажатием: отдельная кнопка на каждый пункт заняла бы всю панель.</summary>
+    private void Session_Click(object sender, RoutedEventArgs e)
+    {
+        if (BtnSession.ContextMenu is not { } menu) return;
+
+        menu.PlacementTarget = BtnSession;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>Шаг стрелки и кнопок транспорта: с Shift — крупный (величина в настройках).</summary>
+    private int StepSize =>
+        Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? Math.Max(App.Settings.BigStepFrames, 1) : 1;
+
+    /// <summary>Шаг кадрами по команде пользователя — он же прекращает шаттл.</summary>
+    private void StepBy(int frames)
+    {
+        if (frames == 0) return;
+
+        StopShuttle();
+
+        if (frames > 0) _sync.StepForward(frames);
+        else _sync.StepBack(-frames);
+    }
+
     private void TogglePlayPause()
     {
         if (!_sync.IsOpen) return;
 
-        if (!_sync.IsPlaying
-            && (_sync.PositionFrame < _sync.SegmentInFrame || _sync.PositionFrame >= _sync.SegmentOutFrame))
+        StopShuttle();
+
+        if (_sync.IsPlaying)
+        {
+            _sync.Pause();
+            return;
+        }
+
+        PlayFromHere();
+    }
+
+    /// <summary>
+    /// Пустить воспроизведение с текущего кадра. Оно всегда идёт внутри отрезка мастера:
+    /// запуск с кадра вне его начинается с начала отрезка, иначе кнопка «play» на
+    /// отрезанном хвосте не делала бы ничего.
+    /// </summary>
+    private void PlayFromHere()
+    {
+        if (_sync.PositionFrame < _sync.SegmentInFrame || _sync.PositionFrame >= _sync.SegmentOutFrame)
             SeekFrame(_sync.SegmentInFrame);
 
-        _sync.TogglePlayPause(SeekTrackFrame);
+        _sync.Play(SeekTrackFrame);
     }
 
     private bool HandleKey(Key key)
@@ -204,7 +265,7 @@ public partial class MainWindow : Window
         var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
-        var step = shift ? 10 : 1;
+        var step = shift ? Math.Max(App.Settings.BigStepFrames, 1) : 1;
 
         switch (key)
         {
@@ -212,17 +273,23 @@ public partial class MainWindow : Window
             case Key.O when ctrl: OpenWithDialog(_a); return true;
             case Key.Space: TogglePlayPause(); return true;
 
+            // Шаттл монтажного пульта: J — назад, K — стоп, L — вперёд; повторное
+            // нажатие удваивает скорость (фаза 5).
+            case Key.J: ShuttleBack(); return true;
+            case Key.K: ShuttleStop(); return true;
+            case Key.L when !ctrl: ShuttleForward(); return true;
+
             // Alt+стрелки правят сдвиг второго трека покадрово — мышью так не попасть.
             case Key.Right when alt: NudgeOffset(step); return true;
             case Key.Left when alt: NudgeOffset(-step); return true;
             case Key.D0 or Key.NumPad0 when alt: ResetOffset(); return true;
 
-            case Key.Right: _sync.StepForward(step); return true;
-            case Key.Left: _sync.StepBack(step); return true;
+            case Key.Right: StepBy(step); return true;
+            case Key.Left: StepBy(-step); return true;
 
             // Home/End работают по отрезку — он и есть рабочая область; края шкалы под Shift.
-            case Key.Home: SeekFrame(shift ? 0 : _sync.SegmentInFrame); return true;
-            case Key.End: SeekFrame(shift ? _sync.LastFrame : _sync.SegmentOutFrame); return true;
+            case Key.Home: StopShuttle(); SeekFrame(shift ? 0 : _sync.SegmentInFrame); return true;
+            case Key.End: StopShuttle(); SeekFrame(shift ? _sync.LastFrame : _sync.SegmentOutFrame); return true;
 
             case Key.Tab: SwitchActiveTrack(); return true;
             case Key.V: CycleLayout(); return true;
@@ -236,13 +303,19 @@ public partial class MainWindow : Window
             case Key.I when shift: ResetSegment(); return true;
             case Key.I: SetSegmentIn(); return true;
             case Key.O: SetSegmentOut(); return true;
-            case Key.L: ToggleLoop(); return true;
+
+            // L отдана шаттлу, поэтому петля переехала на Ctrl+L.
+            case Key.L when ctrl: ToggleLoop(); return true;
+
+            case Key.S when ctrl: SaveSessionAs(); return true;
             case Key.S: ToggleSnap(); return true;
             case Key.F: FitTimeline(); return true;
             case Key.OemPlus or Key.Add: ZoomTimeline(ZoomStep); return true;
             case Key.OemMinus or Key.Subtract: ZoomTimeline(1 / ZoomStep); return true;
 
             case Key.C: ToggleSide(SideMode.Cache); return true;
+            case Key.F1: OpenSettings(); return true;
+            case Key.OemComma when ctrl: OpenSettings(); return true;
             default: return false;
         }
     }
@@ -380,21 +453,40 @@ public partial class MainWindow : Window
             OpenFile(track, dlg.FileName);
     }
 
-    private void OpenFile(PlayerTrack track, string path)
+    /// <summary>
+    /// Открыть ролик в трек. Возвращает, получилось ли: восстановление сессии открывает
+    /// два файла подряд и должно знать, что из этого вышло.
+    /// </summary>
+    /// <param name="quiet">Не писать сообщение об успехе — его напишет вызывающий.</param>
+    private bool OpenFile(PlayerTrack track, string path, bool quiet = false)
     {
+        StopShuttle();
+
         // Открытие всегда начинается с прямого декода: решение о кэше принимается
         // после того, как файл открылся и стали известны кодек и число кадров.
         CancelBuild(track);
         track.ResetCacheState();
         UseDirectBackend(track);
 
-        var res = track.Backend.Open(path);
-        if (!res.Success)
+        // Библиотека декодирования — нативный код, и на битом файле она может не вернуть
+        // ошибку, а бросить исключение: падать окном приложения из-за одного ролика нельзя.
+        OpenResult res;
+        try
         {
-            Status($"не открылся {Path.GetFileName(path)}: {res.Error}");
-            return;
+            res = track.Backend.Open(path);
+        }
+        catch (Exception ex)
+        {
+            res = OpenResult.Fail(ex.Message);
         }
 
+        if (!res.Success)
+        {
+            ShowOpenError(track, path, res.Error);
+            return false;
+        }
+
+        ClearOpenError(track);
         track.ResetSegment();
         SetActiveTrack(track.Id);
 
@@ -402,21 +494,26 @@ public partial class MainWindow : Window
         App.Settings.Save();
 
         var m = track.Media!;
-        Status($"{track.Letter}: открыт {m.FileName} — {m.Codec} {m.Width}×{m.Height}, {m.Fps:F3} fps" +
-               (m.HardwareAcceleration ? ", аппаратный декод" : ", программный декод"));
+        if (!quiet)
+            Status($"{track.Letter}: открыт {m.FileName} — {m.Codec} {m.Width}×{m.Height}, {m.Fps:F3} fps" +
+                   (m.HardwareAcceleration ? ", аппаратный декод" : ", программный декод"));
 
         UpdateState();
         SeekFrame(_sync.PositionFrame);
 
         // Замер шага назад и сборка кэша — после того, как первый кадр уже на экране.
         Dispatcher.BeginInvoke(DispatcherPriority.Background, () => DecideCache(track, path));
+        return true;
     }
 
     private void CloseFile(PlayerTrack track)
     {
+        ClearOpenError(track);
+
         if (!track.IsOpen) return;
         var name = track.Media!.FileName;
 
+        StopShuttle();
         CancelBuild(track);
         track.Backend.Close();
         UseDirectBackend(track);
@@ -427,11 +524,49 @@ public partial class MainWindow : Window
         Status($"{track.Letter}: закрыт {name}");
     }
 
+    // ---------- ошибки открытия ----------
+
+    /// <summary>
+    /// Отказ показываем там, где ждали кадр: строка состояния под таймлайном при
+    /// открытии второго ролика легко остаётся незамеченной, а пустая панель трека —
+    /// ровно то место, куда смотрят.
+    /// </summary>
+    private void ShowOpenError(PlayerTrack track, string path, string error)
+    {
+        var (title, hint) = track.Id == TrackId.A ? (DropTitleA, DropHintA) : (DropTitleB, DropHintB);
+        var name = Path.GetFileName(path);
+        var reason = string.IsNullOrWhiteSpace(error) ? "причина неизвестна" : error;
+
+        // Без FFmpeg не открывается ничего, и настоящая причина — именно он.
+        if (string.IsNullOrEmpty(AppEnv.FFmpegDir))
+            reason += ". Библиотеки FFmpeg не найдены: задайте COMPARISONPLAYER_FFMPEG_DIR " +
+                      "или положите их в подкаталог FFmpeg рядом с программой";
+
+        title.Text = $"Не открылся {name}";
+        title.Foreground = (Brush)FindResource("WarnBrush");
+        hint.Text = reason + " · перетащите сюда другой файл";
+
+        UpdateState();
+        Status($"{track.Letter}: не открылся {name} — {reason}");
+    }
+
+    /// <summary>Вернуть панели трека обычное приглашение перетащить файл.</summary>
+    private void ClearOpenError(PlayerTrack track)
+    {
+        var (title, hint) = track.Id == TrackId.A ? (DropTitleA, DropHintA) : (DropTitleB, DropHintB);
+
+        title.Text = $"Трек {track.Letter} пуст";
+        title.Foreground = (Brush)FindResource("TextBrush");
+        hint.Text = track.Id == TrackId.A
+            ? "перетащите видео сюда · mp4, mkv, mov, avi, ts"
+            : "перетащите сюда второй ролик";
+    }
+
     // ---------- перетаскивание файла ----------
 
     private void OnDragOver(object sender, DragEventArgs e)
     {
-        var path = DroppedVideo(e);
+        var (path, _) = DroppedVideo(e);
         e.Effects = path is null ? DragDropEffects.None : DragDropEffects.Copy;
         e.Handled = true;
     }
@@ -439,29 +574,45 @@ public partial class MainWindow : Window
     private void OnDrop(object sender, DragEventArgs e, TrackId id)
     {
         e.Handled = true;
-        var path = DroppedVideo(e);
+        var (path, error) = DroppedVideo(e);
 
         if (path is null)
         {
-            Status("формат не поддерживается — перетащите видеофайл");
+            Status(error);
+            return;
+        }
+
+        // Сессию открываем как сессию: её файл тоже удобно бросать в окно.
+        if (path.EndsWith(Session.FileExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            if (Session.Load(path) is { } session) ApplySession(session, $"сессия «{Path.GetFileNameWithoutExtension(path)}»");
+            else Status($"не прочитать сессию {Path.GetFileName(path)} — файл повреждён");
             return;
         }
 
         OpenFile(_sync.Track(id), path);
     }
 
-    /// <summary>Путь к перетаскиваемому видео либо null, если это не поддерживаемый файл.</summary>
-    private static string? DroppedVideo(DragEventArgs e)
+    /// <summary>
+    /// Путь к перетаскиваемому файлу и причина отказа, если брать его не следует.
+    /// Причину важно назвать: «ничего не произошло» на брошенную папку читается как сбой.
+    /// </summary>
+    private static (string? Path, string Error) DroppedVideo(DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return null;
-        if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files) return null;
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return (null, "это не файл — перетащите видео");
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files)
+            return (null, "не удалось прочитать перетаскиваемое");
 
         var path = files[0];
-        if (!File.Exists(path)) return null;   // каталог плеер не открывает
+
+        if (Directory.Exists(path)) return (null, "это папка — перетащите видеофайл");
+        if (!File.Exists(path)) return (null, $"файл не найден: {path}");
+
+        if (path.EndsWith(Session.FileExtension, StringComparison.OrdinalIgnoreCase)) return (path, "");
 
         return VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)
-            ? path
-            : null;
+            ? (path, "")
+            : (null, $"формат {Path.GetExtension(path)} не поддерживается — {string.Join(", ", VideoExtensions)}");
     }
 
     // ---------- таймлайн ----------
@@ -474,7 +625,11 @@ public partial class MainWindow : Window
         _loop = App.Settings.LoopSegment;
         Timeline.SnapEnabled = App.Settings.SnapToFrames;
 
-        Timeline.ScrubStarted += (_, _) => _scrubbing = true;
+        Timeline.ScrubStarted += (_, _) =>
+        {
+            StopShuttle();
+            _scrubbing = true;
+        };
         Timeline.ScrubMoved += (_, frame) => TimelineScrub(frame);
         Timeline.ScrubEnded += (_, frame) => TimelineScrubEnd(frame);
         Timeline.TrimDragged += (_, change) => TimelineTrim(change);
@@ -799,7 +954,49 @@ public partial class MainWindow : Window
         _loop = !_loop;
         App.Settings.LoopSegment = _loop;
         UpdateTimelineButtons();
-        Status(_loop ? "петля по отрезку включена (L)" : "петля по отрезку выключена (L)");
+        Status(_loop ? "петля по отрезку включена (Ctrl+L)" : "петля по отрезку выключена (Ctrl+L)");
+    }
+
+    // ---------- настройки ----------
+
+    /// <summary>
+    /// Окно настроек. Значения, которые меняют поведение открытых треков (режим кэша,
+    /// частота прокси), применяются теми же путями, что и переключатели панели «Кэш…»:
+    /// одно решение — одна реализация.
+    /// </summary>
+    private void OpenSettings()
+    {
+        var before = App.Settings;
+        var dialog = new SettingsWindow(before) { Owner = this };
+
+        if (dialog.ShowDialog() != true) return;
+
+        var changed = dialog.Result;
+        var cacheMode = changed.CacheMode;
+        var cacheFps = changed.CacheFps;
+
+        // Режим кэша и частоту прокси применяем отдельно и после сохранения остального:
+        // они пересобирают кэш и трогают открытые треки.
+        changed.CacheMode = before.CacheMode;
+        changed.CacheFps = before.CacheFps;
+
+        App.Settings = changed;
+        App.Settings.Save();
+
+        _showOsd = changed.ShowOverlay;
+        _loop = changed.LoopSegment;
+        Timeline.SnapEnabled = changed.SnapToFrames;
+
+        RbAutoHint.Text = $"строить, если шаг назад медленнее {changed.StepBackThresholdMs} мс";
+
+        UpdateTimelineButtons();
+        UpdatePosition();
+
+        if (cacheMode != App.Settings.CacheMode) ApplyCacheMode(cacheMode);
+        if (Math.Abs(cacheFps - App.Settings.CacheFps) > 0.001) ApplyCacheFps(cacheFps);
+
+        InitCacheUi();
+        Status("настройки сохранены");
     }
 
     /// <summary>Границы отрезка ставит активный трек — в его собственных кадрах.</summary>
@@ -852,9 +1049,10 @@ public partial class MainWindow : Window
             return;
         }
 
+        StopShuttle();
         _sync.Pause();
         SeekFrame(_sync.SegmentOutFrame);
-        Status($"конец отрезка (кадр {_sync.SegmentOutFrame}) — петля выключена (L)");
+        Status($"конец отрезка (кадр {_sync.SegmentOutFrame}) — петля выключена (Ctrl+L)");
     }
 
     private void UpdateTimelineButtons()

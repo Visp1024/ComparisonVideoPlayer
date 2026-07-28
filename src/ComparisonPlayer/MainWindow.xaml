@@ -44,10 +44,31 @@
                 </Button>
                 <Button x:Name="BtnClose" Style="{StaticResource ToolButton}" Content="Закрыть" Click="Close_Click"
                         ToolTip="Закрыть файл активного трека" />
+
+                <!-- Сессия (фаза 5): пара роликов с выравниванием и отрезками — результат
+                     ручной работы, и он переживает закрытие окна -->
+                <Button x:Name="BtnSession" Style="{StaticResource ToolButton}" Content="Сессия…"
+                        Click="Session_Click" ToolTip="Сохранить, открыть или восстановить сессию сравнения">
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="SessionMenu" Background="{StaticResource Panel2Brush}"
+                                     Foreground="{StaticResource TextBrush}"
+                                     BorderBrush="{StaticResource LineBrush}">
+                            <MenuItem Header="Сохранить сессию…  Ctrl+S" Click="SessionSave_Click" />
+                            <MenuItem Header="Открыть сессию…" Click="SessionOpen_Click" />
+                            <Separator />
+                            <MenuItem Header="Восстановить последнюю" Click="SessionRestore_Click" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+
                 <Button x:Name="BtnInfo" Style="{StaticResource ToolButton}" Content="Сведения" Click="Info_Click"
                         ToolTip="Сведения о файле (Ctrl+I)" />
                 <Button x:Name="BtnLayout" Style="{StaticResource ToolButton}" Content="Рядом" Click="Layout_Click"
                         ToolTip="Что показывать: рядом / только A / только B (V)" />
+
+                <Button x:Name="BtnSettings" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
+                        Content="Настройки" Margin="8,0,0,0" Click="Settings_Click"
+                        ToolTip="Настройки и шпаргалка по клавишам (F1)" />
 
                 <!-- Кэш кадров: индикаторы режима по треку и панель управления -->
                 <Button x:Name="BtnCache" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
@@ -428,7 +449,7 @@
                                Foreground="{StaticResource MutedBrush}" />
                     <Button x:Name="BtnLoop" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
                             Content="Петля" Margin="0" Click="Loop_Click"
-                            ToolTip="Повторять отрезок при воспроизведении (L)" />
+                            ToolTip="Повторять отрезок при воспроизведении (Ctrl+L)" />
                     <Button x:Name="BtnSegReset" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
                             Content="Сбросить" Click="SegmentReset_Click"
                             ToolTip="Отрезок активного трека на весь ролик (Shift+I)" />
@@ -446,12 +467,16 @@
 
         <!-- Транспорт -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="14,10,14,12" VerticalAlignment="Center">
+            <Button x:Name="BtnShuttleBack" Style="{StaticResource TransportButton}" Content="◀◀"
+                    Click="ShuttleBack_Click" ToolTip="Шаттл назад: повторное нажатие вдвое быстрее (J)" />
             <Button x:Name="BtnPrev" Style="{StaticResource TransportButton}" Content="◀|" Click="StepPrev_Click"
-                    ToolTip="Шаг на кадр назад (←)" />
+                    ToolTip="Шаг на кадр назад (←); с Shift — крупный шаг" />
             <Button x:Name="BtnPlay" Style="{StaticResource PlayButton}" Content="▶" Click="PlayPause_Click"
-                    ToolTip="Воспроизведение / пауза (Space)" />
+                    ToolTip="Воспроизведение / пауза (Space); K останавливает шаттл" />
             <Button x:Name="BtnNext" Style="{StaticResource TransportButton}" Content="|▶" Click="StepNext_Click"
-                    ToolTip="Шаг на кадр вперёд (→)" />
+                    ToolTip="Шаг на кадр вперёд (→); с Shift — крупный шаг" />
+            <Button x:Name="BtnShuttleFwd" Style="{StaticResource TransportButton}" Content="▶▶"
+                    Click="ShuttleForward_Click" ToolTip="Шаттл вперёд: повторное нажатие вдвое быстрее (L)" />
 
             <TextBlock x:Name="TxtTime" Margin="10,0,0,0" VerticalAlignment="Center"
                        FontFamily="{StaticResource MonoFont}" FontSize="19" />

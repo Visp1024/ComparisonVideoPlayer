@@ -533,6 +533,17 @@ public partial class MainWindow
         if (_syncingCacheUi || sender is not RadioButton { Tag: string tag }) return;
         if (!Enum.TryParse<FrameCacheMode>(tag, out var mode) || mode == App.Settings.CacheMode) return;
 
+        ApplyCacheMode(mode);
+        UpdateModeBadges();
+        UpdateCachePanel();
+    }
+
+    /// <summary>
+    /// Сменить режим кэша и разобраться с открытыми треками. Вызывается и панелью
+    /// «Кэш…», и окном настроек (фаза 5) — решение одно, реализация тоже.
+    /// </summary>
+    private void ApplyCacheMode(FrameCacheMode mode)
+    {
         App.Settings.CacheMode = mode;
         App.Settings.Save();
 
@@ -563,9 +574,15 @@ public partial class MainWindow
                 if (!decided) Status($"режим кэша: {ModeName(mode)}");
                 break;
         }
+    }
 
-        UpdateModeBadges();
-        UpdateCachePanel();
+    private void CacheFps_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_syncingCacheUi || sender is not RadioButton { Tag: string tag }) return;
+        if (!double.TryParse(tag, CultureInfo.InvariantCulture, out var fps)) return;
+        if (Math.Abs(fps - App.Settings.CacheFps) < 0.001) return;
+
+        ApplyCacheFps(fps);
     }
 
     /// <summary>
@@ -573,12 +590,8 @@ public partial class MainWindow
     /// готовый подхватываем сразу, иначе решение принимается заново (замер уже
     /// запомнен, так что повторно файл не мерим).
     /// </summary>
-    private void CacheFps_Checked(object sender, RoutedEventArgs e)
+    private void ApplyCacheFps(double fps)
     {
-        if (_syncingCacheUi || sender is not RadioButton { Tag: string tag }) return;
-        if (!double.TryParse(tag, CultureInfo.InvariantCulture, out var fps)) return;
-        if (Math.Abs(fps - App.Settings.CacheFps) < 0.001) return;
-
         App.Settings.CacheFps = fps;
         App.Settings.Save();
         Status($"частота прокси: {FpsName(fps)}");

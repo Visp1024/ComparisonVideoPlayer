@@ -57,6 +57,38 @@ public sealed class Settings
     /// <summary>Предел дискового кэша; сверх него вытесняются давно не открывавшиеся ролики.</summary>
     public double CacheLimitGb { get; set; } = 20;
 
+    // ---------- фаза 5 ----------
+
+    /// <summary>
+    /// Восстанавливать при запуске последнюю сессию (файлы, сдвиг, отрезки, позицию).
+    /// Файлы из командной строки сильнее: их открыли осознанно именно сейчас.
+    /// </summary>
+    public bool RestoreSession { get; set; } = true;
+
+    /// <summary>Шаг стрелки с Shift и кнопок «крупный шаг», в кадрах мастера.</summary>
+    public int BigStepFrames { get; set; } = 10;
+
+    /// <summary>Крупный шаг быстрой прокрутки колесом, в кадрах мастера.</summary>
+    public int WheelFastFrames { get; set; } = 10;
+
+    /// <summary>
+    /// Промежуток между щелчками колеса, ниже которого прокрутка считается быстрой
+    /// и идёт крупным шагом. Медленная прокрутка всегда покадровая.
+    /// </summary>
+    public int WheelFastMs { get; set; } = 70;
+
+    /// <summary>Обратить направление прокрутки колесом над кадром.</summary>
+    public bool WheelInverted { get; set; }
+
+    /// <summary>Предел разгона шаттла J/L: 1× → 2× → 4× → … до этого значения.</summary>
+    public double ShuttleMaxSpeed { get; set; } = 8;
+
+    /// <summary>
+    /// Копия для окна настроек: оно правит её, а не живые настройки, — отмена должна
+    /// отменять. Полей здесь только простые типы, поэтому поверхностной копии довольно.
+    /// </summary>
+    public Settings Clone() => (Settings)MemberwiseClone();
+
     // Режим кэша пишется словом, а не числом: файл настроек правят руками.
     private static readonly JsonSerializerOptions Options = new()
     {

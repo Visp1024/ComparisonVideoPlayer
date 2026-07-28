@@ -52,6 +52,9 @@ public static class AppEnv
     public static string CacheDir { get; } = Path.Combine(DataDir, "cache");
 
     public static string SettingsFile => Path.Combine(DataDir, "settings.json");
+
+    /// <summary>Последняя сессия: файлы треков, сдвиг, отрезки и позиция (фаза 5).</summary>
+    public static string SessionFile => Path.Combine(DataDir, "session.json");
     public static string EngineLogFile => Path.Combine(DataDir, "flyleaf.log");
 
     /// <summary>Запомненные замеры скорости шага назад, чтобы не мерить один файл дважды.</summary>

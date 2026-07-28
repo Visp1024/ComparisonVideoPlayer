@@ -10,7 +10,11 @@ namespace ComparisonPlayer;
 /// </summary>
 public partial class App : Application
 {
-    public static Settings Settings { get; private set; } = new();
+    /// <summary>
+    /// Действующие настройки. Окно настроек (фаза 5) правит копию и по «Сохранить»
+    /// подменяет её целиком, поэтому свойство пишется не только отсюда.
+    /// </summary>
+    public static Settings Settings { get; set; } = new();
 
     /// <summary>Файл из командной строки: запуск через «Открыть с помощью» или из консоли.</summary>
     public static string? StartupFile { get; private set; }

@@ -13,6 +13,9 @@
         -NoFFmpeg             не копировать FFmpeg в билд
         -FFmpegDir <путь>     явный каталог с avcodec-*.dll и ffmpeg.exe
         -OutDir <путь>        куда класть результат
+        -Zip                  дополнительно упаковать результат в переносимый архив
+
+    Инсталлятор собирается отдельно: tools/make-installer.ps1 (Inno Setup).
 #>
 [CmdletBinding()]
 param(
@@ -22,7 +25,8 @@ param(
     [string] $FFmpegDir     = '',
     [switch] $FrameworkDependent,
     [switch] $NoSingleFile,
-    [switch] $NoFFmpeg
+    [switch] $NoFFmpeg,
+    [switch] $Zip
 )
 
 Set-StrictMode -Version Latest
@@ -105,7 +109,22 @@ $sizeMb = [math]::Round(((Get-ChildItem -LiteralPath $OutDir -Recurse -File |
 $mode = if ($selfContained) { 'self-contained' } else { 'framework-dependent' }
 if (-not $NoSingleFile) { $mode += ', single-file' }
 
+# Переносимый вариант поставки: распаковал куда угодно и запустил, без установки.
+$zipPath = ''
+if ($Zip) {
+    $version = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion
+    if (-not $version) { $version = '1.0.0' }
+    $version = ($version -split '\+')[0]
+
+    $zipPath = Join-Path (Split-Path -Parent $OutDir) ("ComparisonVideoPlayer-{0}-{1}.zip" -f $version, $Runtime)
+    if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+
+    Compress-Archive -Path (Join-Path $OutDir '*') -DestinationPath $zipPath
+    Write-Host ("архив: {0}" -f $zipPath) -ForegroundColor DarkGray
+}
+
 Write-Host ''
 Write-Host ("Билд готов: {0}" -f $OutDir) -ForegroundColor Green
 Write-Host ("  {0}, {1}, суммарно {2} МБ" -f $Runtime, $mode, $sizeMb)
 Write-Host ("  запуск: {0}" -f $exe)
+if ($zipPath) { Write-Host ("  архив:  {0}" -f $zipPath) }
