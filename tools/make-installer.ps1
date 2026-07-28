@@ -1,5 +1,5 @@
 ﻿<#
-    Собирает инсталлятор ComparisonVideoPlayer: сначала публикационный билд
+    Собирает инсталлятор CVP: сначала публикационный билд
     (tools/publish.ps1), затем Inno Setup поверх него.
 
     Запуск (Windows PowerShell 5.1 или pwsh):
@@ -93,7 +93,7 @@ Write-Host "$Iscc $($isccArgs -join ' ')" -ForegroundColor DarkGray
 & $Iscc @isccArgs
 if ($LASTEXITCODE -ne 0) { throw "ISCC завершился с кодом $LASTEXITCODE" }
 
-$setup = Join-Path $OutDir "ComparisonVideoPlayer-$version-setup.exe"
+$setup = Join-Path $OutDir "CVP-$version-setup.exe"
 if (-not (Test-Path -LiteralPath $setup)) { throw "ISCC отработал, но инсталлятора нет: $setup" }
 
 $sizeMb = [math]::Round(((Get-Item -LiteralPath $setup).Length / 1MB), 1)

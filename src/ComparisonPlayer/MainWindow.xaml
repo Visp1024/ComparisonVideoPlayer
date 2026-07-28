@@ -4,7 +4,7 @@
         xmlns:fl="clr-namespace:FlyleafLib.Controls.WPF;assembly=FlyleafLib"
         xmlns:tl="clr-namespace:ComparisonPlayer.Timeline"
         xmlns:chrome="clr-namespace:ComparisonPlayer.Chrome"
-        Title="ComparisonVideoPlayer" Icon="app.ico" Height="820" Width="1320"
+        Title="CVP" Icon="app.ico" Height="820" Width="1320"
         MinHeight="520" MinWidth="960"
         Background="{StaticResource PanelBrush}"
         Foreground="{StaticResource TextBrush}"
@@ -26,7 +26,7 @@
         <!-- Своя титульная полоса (задача #21): родная шапка Windows светлая и спорит
              с почти чёрным кадром. По центру — что открыто: сейчас это единственное
              место, где имена файлов видны, не наводя глаз на метки поверх кадра. -->
-        <chrome:TitleBar x:Name="Bar" Grid.Row="0" Caption="ComparisonVideoPlayer" />
+        <chrome:TitleBar x:Name="Bar" Grid.Row="0" Caption="CVP" />
 
         <!-- Панель инструментов -->
         <Border Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1" Padding="12,8">

@@ -69,7 +69,7 @@
 ### Упаковка
 
 - `tools/publish.ps1` (задача #15) получил ключ **`-Zip`**: переносимая поставка
-  `publish/ComparisonVideoPlayer-<версия>-win-x64.zip` — распаковал и запустил.
+  `publish/CVP-<версия>-win-x64.zip` — распаковал и запустил.
 - `tools/installer.iss` + **`tools/make-installer.ps1`** — инсталлятор Inno Setup 6:
   собирает билд, кладёт exe и подкаталог `FFmpeg` в Program Files, делает ярлыки
   и деинсталлятор. Ассоциации с типами файлов намеренно не трогает — это задача #13.

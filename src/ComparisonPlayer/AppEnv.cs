@@ -64,7 +64,11 @@ public static class AppEnv
         }
     }
 
-    /// <summary>Каталог пользовательских данных приложения: настройки, журнал движка.</summary>
+    /// <summary>
+    /// Каталог пользовательских данных приложения: настройки, журнал движка.
+    /// Имя папки осталось прежним после переименования продукта в CVP (задача #26):
+    /// новое имя увело бы уже накопленные настройки, сессию и кэш кадров.
+    /// </summary>
     public static string DataDir { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "ComparisonVideoPlayer");

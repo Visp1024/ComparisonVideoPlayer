@@ -61,7 +61,7 @@ public partial class App : Application
                          (string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "(не найден)" : AppEnv.FFmpegDir);
             }
 
-            MessageDialog.Show(null, "ComparisonVideoPlayer", message, detail);
+            MessageDialog.Show(null, "CVP", message, detail);
             Shutdown(1);
             return;
         }

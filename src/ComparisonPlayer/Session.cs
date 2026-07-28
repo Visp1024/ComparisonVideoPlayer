@@ -34,7 +34,7 @@ public sealed class Session
     /// <summary>Расширение и фильтр диалога для сессии, сохранённой отдельным файлом.</summary>
     public const string FileExtension = ".cvp.json";
 
-    public const string FileFilter = "Сессия ComparisonVideoPlayer|*.cvp.json|Все файлы|*.*";
+    public const string FileFilter = "Сессия CVP|*.cvp.json|Все файлы|*.*";
 
     public SessionTrack A { get; set; } = new();
     public SessionTrack B { get; set; } = new();

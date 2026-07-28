@@ -1366,8 +1366,8 @@ public partial class MainWindow : AppWindow
         ModeBadgeB.Visibility = _b.IsOpen ? Visibility.Visible : Visibility.Collapsed;
 
         Title = _sync.OpenTracks.Any()
-            ? "ComparisonVideoPlayer — " + string.Join(" · ", _sync.OpenTracks.Select(t => $"{t.Letter}: {t.Media!.FileName}"))
-            : "ComparisonVideoPlayer";
+            ? "CVP — " + string.Join(" · ", _sync.OpenTracks.Select(t => $"{t.Letter}: {t.Media!.FileName}"))
+            : "CVP";
 
         UpdateTitleBar();
 

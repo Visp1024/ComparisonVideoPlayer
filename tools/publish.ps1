@@ -116,7 +116,7 @@ if ($Zip) {
     if (-not $version) { $version = '1.0.0' }
     $version = ($version -split '\+')[0]
 
-    $zipPath = Join-Path (Split-Path -Parent $OutDir) ("ComparisonVideoPlayer-{0}-{1}.zip" -f $version, $Runtime)
+    $zipPath = Join-Path (Split-Path -Parent $OutDir) ("CVP-{0}-{1}.zip" -f $version, $Runtime)
     if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 
     Compress-Archive -Path (Join-Path $OutDir '*') -DestinationPath $zipPath

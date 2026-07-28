@@ -1,4 +1,4 @@
-; Инсталлятор ComparisonVideoPlayer (Inno Setup 6).
+; Инсталлятор CVP (Inno Setup 6).
 ;
 ; Сам по себе этот скрипт ничего не собирает: он упаковывает готовый результат
 ; tools/publish.ps1 (single-file exe плюс подкаталог FFmpeg рядом с ним).
@@ -19,7 +19,7 @@
   #define OutputDir "..\publish\installer"
 #endif
 
-#define AppName "ComparisonVideoPlayer"
+#define AppName "CVP"
 #define AppExe  "ComparisonPlayer.exe"
 
 [Setup]
@@ -34,7 +34,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#AppExe}
 OutputDir={#OutputDir}
-OutputBaseFilename=ComparisonVideoPlayer-{#AppVersion}-setup
+OutputBaseFilename=CVP-{#AppVersion}-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

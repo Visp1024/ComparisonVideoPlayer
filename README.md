@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/app-icon.svg" width="96" alt="ComparisonVideoPlayer" />
+<img src="docs/app-icon.svg" width="96" alt="CVP" />
 
-# CVP | ComparisonVideoPlayer
+# CVP
 
 **Видеоплеер для Windows для покадрового воспроизведения и сравнения двух роликов:**
 точный шаг по кадрам, синхронное воспроизведение двух треков
