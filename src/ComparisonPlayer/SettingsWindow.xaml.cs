@@ -69,7 +69,16 @@ public partial class SettingsWindow : Window
         ChkOverlay.IsChecked = s.ShowOverlay;
         ChkSnap.IsChecked = s.SnapToFrames;
         ChkLoop.IsChecked = s.LoopSegment;
+        ChkAutoPlay.IsChecked = s.AutoPlayOnOpen;
         ChkWheelInverted.IsChecked = s.WheelInverted;
+
+        (s.StartupLayout switch
+        {
+            StartupLayoutMode.Side => RbStartSide,
+            StartupLayoutMode.OnlyA => RbStartOnlyA,
+            StartupLayoutMode.OnlyB => RbStartOnlyB,
+            _ => RbStartRemembered
+        }).IsChecked = true;
 
         TxtBigStep.Text = s.BigStepFrames.ToString(CultureInfo.InvariantCulture);
         TxtWheelFrames.Text = s.WheelFastFrames.ToString(CultureInfo.InvariantCulture);
@@ -95,7 +104,13 @@ public partial class SettingsWindow : Window
         s.ShowOverlay = ChkOverlay.IsChecked == true;
         s.SnapToFrames = ChkSnap.IsChecked == true;
         s.LoopSegment = ChkLoop.IsChecked == true;
+        s.AutoPlayOnOpen = ChkAutoPlay.IsChecked == true;
         s.WheelInverted = ChkWheelInverted.IsChecked == true;
+
+        s.StartupLayout = RbStartSide.IsChecked == true ? StartupLayoutMode.Side
+            : RbStartOnlyA.IsChecked == true ? StartupLayoutMode.OnlyA
+            : RbStartOnlyB.IsChecked == true ? StartupLayoutMode.OnlyB
+            : StartupLayoutMode.Remembered;
 
         s.BigStepFrames = Int(TxtBigStep, s.BigStepFrames, 2, 1000);
         s.WheelFastFrames = Int(TxtWheelFrames, s.WheelFastFrames, 2, 1000);

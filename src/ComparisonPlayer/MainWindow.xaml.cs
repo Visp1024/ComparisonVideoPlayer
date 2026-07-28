@@ -152,16 +152,56 @@ public partial class MainWindow : Window
 
         if (App.StartupFile is { } file)
         {
-            OpenFile(_a, file);
+            var opened = OpenFile(_a, file);
 
             if (App.StartupFileB is { } second)
-                OpenFile(_b, second);
+                opened |= OpenFile(_b, second);
 
+            ApplyStartupLayout();
+            if (opened) AutoPlayAfterOpen();
             return;
         }
 
         // Файлы из командной строки сильнее сессии: их открыли осознанно именно сейчас.
         RestoreLastSession();
+        ApplyStartupLayout();
+    }
+
+    /// <summary>
+    /// Вид кадра при запуске (настройка, задача #17). «Как в прошлый раз» ничего не
+    /// навязывает: вид уже пришёл из восстановленной сессии, а без неё это «рядом».
+    /// Применяется после открытия файлов — иначе сессия перебила бы выбранный вид.
+    /// </summary>
+    private void ApplyStartupLayout()
+    {
+        LayoutMode? wanted = App.Settings.StartupLayout switch
+        {
+            StartupLayoutMode.Side => LayoutMode.Side,
+            StartupLayoutMode.OnlyA => LayoutMode.OnlyA,
+            StartupLayoutMode.OnlyB => LayoutMode.OnlyB,
+            _ => null
+        };
+
+        if (wanted is not { } layout || layout == _layout) return;
+
+        _layout = layout;
+        ApplyLayout();
+    }
+
+    /// <summary>
+    /// Пустить воспроизведение сразу после открытия ролика, если так настроено
+    /// (задача #17). Ждём фоновой очереди: решение о кэше меряет шаг назад точными
+    /// переходами, и начатое до замера воспроизведение он всё равно сбил бы.
+    /// </summary>
+    private void AutoPlayAfterOpen()
+    {
+        if (!App.Settings.AutoPlayOnOpen) return;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (!_sync.IsOpen || _sync.IsPlaying) return;
+            PlayFromHere();
+        });
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -452,8 +492,8 @@ public partial class MainWindow : Window
             InitialDirectory = Directory.Exists(App.Settings.LastFolder) ? App.Settings.LastFolder : null
         };
 
-        if (dlg.ShowDialog(this) == true)
-            OpenFile(track, dlg.FileName);
+        if (dlg.ShowDialog(this) == true && OpenFile(track, dlg.FileName))
+            AutoPlayAfterOpen();
     }
 
     /// <summary>
@@ -593,7 +633,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        OpenFile(_sync.Track(id), path);
+        if (OpenFile(_sync.Track(id), path)) AutoPlayAfterOpen();
     }
 
     /// <summary>

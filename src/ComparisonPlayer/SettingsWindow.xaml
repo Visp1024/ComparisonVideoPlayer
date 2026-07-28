@@ -72,6 +72,22 @@
                           Content="Притягивать playhead и ручки отрезка к границам (S)" />
                 <CheckBox x:Name="ChkLoop" Style="{StaticResource SettingsCheck}"
                           Content="Повторять отрезок при воспроизведении (Ctrl+L)" />
+                <CheckBox x:Name="ChkAutoPlay" Style="{StaticResource SettingsCheck}"
+                          Content="Начинать воспроизведение сразу при открытии файла" />
+                <TextBlock Style="{StaticResource PanelHint}" Margin="20,-4,0,8"
+                           Text="Относится к открытию файла: из диалога, перетаскиванием и из командной строки. Восстановленная сессия остаётся на паузе — там возвращаются на прежний кадр." />
+
+                <TextBlock Text="В И Д   П Р И   З А П У С К Е" Style="{StaticResource PanelHeader}" Margin="0,6,0,8" />
+                <RadioButton x:Name="RbStartRemembered" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
+                             Tag="Remembered" Content="Как в прошлый раз — вид из восстановленной сессии" />
+                <RadioButton x:Name="RbStartSide" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
+                             Tag="Side" Content="Рядом — оба кадра" />
+                <RadioButton x:Name="RbStartOnlyA" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
+                             Tag="OnlyA" Content="Только A — один кадр во всю ширину" />
+                <RadioButton x:Name="RbStartOnlyB" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
+                             Tag="OnlyB" Content="Только B — один кадр во всю ширину" />
+                <TextBlock Style="{StaticResource PanelHint}" Margin="0,2,0,4"
+                           Text="Вид переключается и на ходу клавишей V. Выбранный здесь вид сильнее сессии: он ставится после её восстановления." />
 
                 <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,14" />
 
