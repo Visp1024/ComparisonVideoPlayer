@@ -9,8 +9,7 @@ namespace ComparisonPlayer;
 /// </summary>
 public static class AppEnv
 {
-    /// <summary>Каталог нативных библиотек FFmpeg (avcodec, avformat и прочие).</summary>
-    public static string FFmpegDir { get; } =
+    private static string _ffmpegDir =
         Environment.GetEnvironmentVariable("COMPARISONPLAYER_FFMPEG_DIR")
         ?? Environment.GetEnvironmentVariable("SPIKE_FFMPEG_DIR")
         ?? Probe(
@@ -18,6 +17,20 @@ public static class AppEnv
             RepoFFmpegDir(),
             @"C:\ffmpeg\bin")
         ?? "";
+
+    /// <summary>Каталог нативных библиотек FFmpeg (avcodec, avformat и прочие).</summary>
+    public static string FFmpegDir => _ffmpegDir;
+
+    /// <summary>
+    /// Переключает приложение на другой каталог библиотек — им пользуется загрузчик
+    /// (<see cref="FFmpegInstaller"/>) сразу после установки, чтобы движок поднялся
+    /// в этом же запуске, без перезапуска программы.
+    /// </summary>
+    public static void UseFFmpegDir(string dir)
+    {
+        _ffmpegDir = dir;
+        _ffmpegExe = ResolveFFmpegExe(dir);
+    }
 
     /// <summary>
     /// Каталог FFmpeg внутри репозитория (tools/ffmpeg/bin) — им пользуется запуск из
@@ -38,9 +51,13 @@ public static class AppEnv
     /// Исполняемый файл ffmpeg для сборки кэша кадров. Рядом с нативными библиотеками
     /// он лежит в тех же сборках FFmpeg; если каталог не найден — надеемся на PATH.
     /// </summary>
-    public static string FFmpegExe { get; } =
-        FFmpegDir.Length > 0 && File.Exists(Path.Combine(FFmpegDir, "ffmpeg.exe"))
-            ? Path.Combine(FFmpegDir, "ffmpeg.exe")
+    public static string FFmpegExe => _ffmpegExe;
+
+    private static string _ffmpegExe = ResolveFFmpegExe(_ffmpegDir);
+
+    private static string ResolveFFmpegExe(string dir)
+        => dir.Length > 0 && File.Exists(Path.Combine(dir, "ffmpeg.exe"))
+            ? Path.Combine(dir, "ffmpeg.exe")
             : "ffmpeg";
 
     /// <summary>
@@ -48,19 +65,19 @@ public static class AppEnv
     /// на FFmpeg отказ движка по другой причине: искать несуществующую проблему дороже,
     /// чем прочитать настоящее сообщение об ошибке.
     /// </summary>
-    public static bool FFmpegLooksUsable
+    public static bool FFmpegLooksUsable => FFmpegLooksUsableIn(_ffmpegDir);
+
+    /// <summary>Тот же признак для произвольного каталога: им проверяется свежая установка.</summary>
+    public static bool FFmpegLooksUsableIn(string dir)
     {
-        get
+        try
         {
-            try
-            {
-                return FFmpegDir.Length > 0
-                    && Directory.EnumerateFiles(FFmpegDir, "avcodec-*.dll").Any();
-            }
-            catch (Exception)
-            {
-                return false;
-            }
+            return dir.Length > 0
+                && Directory.EnumerateFiles(dir, "avcodec-*.dll").Any();
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

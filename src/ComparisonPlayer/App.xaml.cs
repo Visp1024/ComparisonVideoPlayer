@@ -35,6 +35,19 @@ public partial class App : Application
         Directory.CreateDirectory(AppEnv.DataDir);
         AppEnv.CleanupEngineLogs();
 
+        // Библиотек нет — предлагаем скачать их до старта движка. Иначе Engine.Start
+        // упадёт и единственным выходом останется идти за сборкой FFmpeg руками.
+        // Отказ ничего не ломает: запуск продолжится прежним путём, с прежней ошибкой.
+        if (!AppEnv.FFmpegLooksUsable)
+        {
+            // Пока главного окна нет, закрытие диалога при OnLastWindowClose означало бы
+            // «закрылось последнее окно» и погасило бы приложение целиком.
+            var shutdownMode = ShutdownMode;
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            new FFmpegSetupWindow().ShowDialog();
+            ShutdownMode = shutdownMode;
+        }
+
         try
         {
             Engine.Start(new EngineConfig
@@ -56,7 +69,8 @@ public partial class App : Application
             {
                 message +=
                     "\n\nУкажите каталог библиотек FFmpeg переменной окружения COMPARISONPLAYER_FFMPEG_DIR " +
-                    "или положите их в подкаталог FFmpeg рядом с программой.";
+                    "или положите их в подкаталог FFmpeg рядом с программой.\n\n" +
+                    "Предложение скачать готовый комплект появится снова при следующем запуске.";
                 detail = "Библиотеки ожидались в каталоге: " +
                          (string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "(не найден)" : AppEnv.FFmpegDir);
             }
