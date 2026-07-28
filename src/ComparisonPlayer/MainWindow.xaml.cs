@@ -134,6 +134,7 @@ public partial class MainWindow : Window
 
         InitCacheUi();
         InitTimeline();
+        InitCompact();
         ApplyLayout();
 
         // Накладка — отдельное окно, перетаскивание из главного окна там не ловится.
@@ -295,6 +296,8 @@ public partial class MainWindow : Window
             case Key.V: CycleLayout(); return true;
             case Key.M: MakeActiveMaster(); return true;
 
+            // Ctrl+T сворачивает таймлайн до полосы, T без модификатора — накладка на кадре.
+            case Key.T when ctrl: ToggleCompact(); return true;
             case Key.T: ToggleOverlay(); return true;
 
             // I и O заняты отрезком: в покадровой работе он нужнее панели сведений,
@@ -669,7 +672,8 @@ public partial class MainWindow : Window
         }
 
         Timeline.SetTracks(views, _sync.TimelineFrames, _sync.MasterFps);
-        Timeline.SetPosition(_sync.PositionFrame);
+        RefreshCompactBar();
+        ShowPlayhead(_sync.PositionFrame);
     }
 
     /// <summary>
@@ -681,7 +685,7 @@ public partial class MainWindow : Window
     {
         if (!_sync.IsOpen) return;
 
-        Timeline.SetPosition(frame);
+        ShowPlayhead(frame);
         _sync.SetPosition(frame);
         ShowFrameLabels();
 
@@ -693,7 +697,7 @@ public partial class MainWindow : Window
         _scrubbing = false;
         if (!_sync.IsOpen) return;
 
-        Timeline.SetPosition(frame);
+        ShowPlayhead(frame);
         SeekFrame(frame);
     }
 
@@ -774,6 +778,10 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Выравнивание — работа с дорожками: в свёрнутом виде его результат виден только
+        // засечками, поэтому правка сдвига разворачивает таймлайн.
+        ExpandForTimeline();
+
         ShiftTrack(_b, frames);
         SeekFrame(_sync.PositionFrame);
         Status(OffsetMessage());
@@ -788,6 +796,8 @@ public partial class MainWindow : Window
     private void ResetOffset()
     {
         if (!_sync.IsOpen) return;
+
+        ExpandForTimeline();
 
         var shift = _sync.ResetOffsets();
         if (shift != 0) _sync.SetPosition(_sync.PositionFrame + shift);
@@ -930,12 +940,17 @@ public partial class MainWindow : Window
 
     private void ZoomTimeline(double factor)
     {
+        // Зум в свёрнутом виде показывать негде — разворачиваем, а не молчим.
+        ExpandForTimeline();
+
         Timeline.Zoom(factor);
         UpdateZoomText();
     }
 
     private void FitTimeline()
     {
+        ExpandForTimeline();
+
         Timeline.FitAll();
         UpdateZoomText();
         Status("вся шкала в ширину окна (F)");
@@ -1169,6 +1184,10 @@ public partial class MainWindow : Window
         BtnPrev.IsEnabled = BtnNext.IsEnabled = BtnPlay.IsEnabled = BtnStart.IsEnabled = open;
         BtnPlay.Content = _sync.IsPlaying ? "❚❚" : "▶";
 
+        BtnPrevMini.IsEnabled = BtnNextMini.IsEnabled = BtnPlayMini.IsEnabled = open;
+        BtnShuttleBackMini.IsEnabled = BtnShuttleFwdMini.IsEnabled = open;
+        BtnPlayMini.Content = BtnPlay.Content;
+
         EmptyA.Visibility = _a.IsOpen ? Visibility.Collapsed : Visibility.Visible;
         EmptyB.Visibility = _b.IsOpen ? Visibility.Collapsed : Visibility.Visible;
 
@@ -1239,12 +1258,13 @@ public partial class MainWindow : Window
 
     private void UpdatePosition()
     {
-        TxtTime.Text = Timecode(_sync.PositionTime);
+        TxtTime.Text = TxtTimeMini.Text = Timecode(_sync.PositionTime);
         TxtDuration.Text = _sync.IsOpen ? "/ " + Timecode(_sync.Duration) : "/ --:--:--.---";
+        TxtDurationMini.Text = TxtDuration.Text;
 
         ShowFrameLabels();
 
-        if (!_scrubbing) Timeline.SetPosition(_sync.PositionFrame);
+        if (!_scrubbing) ShowPlayhead(_sync.PositionFrame);
 
         EnforceSegment();
     }
@@ -1255,16 +1275,17 @@ public partial class MainWindow : Window
     /// </summary>
     private void ShowFrameLabels()
     {
-        ShowTrackLabels(_a, TxtFrameA, FrameBadgeA, PaneOsdA, PaneMasterA, NoFrameA, NoFrameHintA);
-        ShowTrackLabels(_b, TxtFrameB, FrameBadgeB, PaneOsdB, PaneMasterB, NoFrameB, NoFrameHintB);
+        ShowTrackLabels(_a, TxtFrameA, FrameBadgeA, PaneOsdA, PaneMasterA, NoFrameA, NoFrameHintA, TxtFrameAMini);
+        ShowTrackLabels(_b, TxtFrameB, FrameBadgeB, PaneOsdB, PaneMasterB, NoFrameB, NoFrameHintB, TxtFrameBMini);
     }
 
     private void ShowTrackLabels(PlayerTrack track, TextBlock badgeText, UIElement badge,
-        TextBlock osd, TextBlock role, UIElement noFrame, TextBlock noFrameHint)
+        TextBlock osd, TextBlock role, UIElement noFrame, TextBlock noFrameHint, TextBlock miniText)
     {
         if (!track.IsOpen)
         {
             badgeText.Text = "";
+            miniText.Text = "";
             osd.Text = "";
             role.Text = "";
             noFrame.Visibility = Visibility.Collapsed;
@@ -1278,6 +1299,9 @@ public partial class MainWindow : Window
             ? $"{track.Letter} {approx}{f} / {Math.Max(track.FrameCount - 1, 0)}"
             : $"{track.Letter} —";
         badge.Opacity = frame is null ? 0.45 : 1;
+
+        // В компактном подвале места меньше: номер кадра без общего числа.
+        miniText.Text = frame is { } mini ? $"{track.Letter} {approx}{mini}" : $"{track.Letter} —";
 
         osd.Text = _showOsd && frame is { } shown
             ? $"кадр {approx}{shown} · {Timecode(track.TimeOf(shown))}"

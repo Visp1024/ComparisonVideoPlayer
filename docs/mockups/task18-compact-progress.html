@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComparisonVideoPlayer — компактный вид прогресса, задача #18</title>
+<style>
+  :root {
+    --bg:        #0e1015;
+    --panel:     #161923;
+    --panel-2:   #1d2130;
+    --line:      #2a2f40;
+    --text:      #e2e6f0;
+    --muted:     #8a92a8;
+    --dim:       #5d6479;
+    --accent:    #f2a13c;
+    --accent-dim:#8a5e22;
+    --warn:      #e0625c;
+    --ok:        #56b98b;
+    --trackb:    #4ea3e0;
+    --trackb-dim:#245a80;
+    --video:     #05070b;
+    --shadow:    0 18px 44px -22px rgba(0,0,0,.9);
+    --radius:    6px;
+
+    --sans: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:#eceef3; --panel:#ffffff; --panel-2:#f3f4f8; --line:#d3d7e2;
+      --text:#1a1e2a; --muted:#5f6779; --dim:#8d93a3;
+      --accent:#b96f0c; --accent-dim:#e8c391; --warn:#c2403a; --ok:#2c7d58;
+      --trackb:#2b7fbe; --trackb-dim:#a8cbe6;
+      --video:#10131a; --shadow:0 14px 32px -20px rgba(20,25,40,.55);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0e1015; --panel:#161923; --panel-2:#1d2130; --line:#2a2f40;
+    --text:#e2e6f0; --muted:#8a92a8; --dim:#5d6479;
+    --accent:#f2a13c; --accent-dim:#8a5e22; --warn:#e0625c; --ok:#56b98b;
+    --trackb:#4ea3e0; --trackb-dim:#245a80;
+    --video:#05070b; --shadow:0 18px 44px -22px rgba(0,0,0,.9);
+  }
+  :root[data-theme="light"] {
+    --bg:#eceef3; --panel:#ffffff; --panel-2:#f3f4f8; --line:#d3d7e2;
+    --text:#1a1e2a; --muted:#5f6779; --dim:#8d93a3;
+    --accent:#b96f0c; --accent-dim:#e8c391; --warn:#c2403a; --ok:#2c7d58;
+    --trackb:#2b7fbe; --trackb-dim:#a8cbe6;
+    --video:#10131a; --shadow:0 14px 32px -20px rgba(20,25,40,.55);
+  }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 15px; line-height: 1.6;
+    margin: 0; padding: 48px 24px 96px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0; font-weight: 650; text-wrap: balance; }
+  header p { margin: 0; color: var(--muted); max-width: 64ch; }
+
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 {
+    font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--dim); margin: 0; font-weight: 600;
+    border-bottom: 1px solid var(--line); padding-bottom: 8px;
+  }
+  section > p { margin: 0; color: var(--muted); max-width: 70ch; }
+  .lead { color: var(--text) !important; }
+  .q { color: var(--accent) !important; font-weight: 600; }
+
+  /* ---------- окно приложения ---------- */
+  .app {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; box-shadow: var(--shadow);
+  }
+  .toolbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 12px; border-bottom: 1px solid var(--line);
+  }
+  .btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 5px 11px; font-size: 13px; font-family: var(--sans);
+    cursor: default; white-space: nowrap;
+  }
+  .btn.primary { color: var(--accent); border-color: var(--accent-dim); }
+  .btn.b { color: var(--trackb); border-color: var(--trackb-dim); }
+  .btn.sm { padding: 3px 8px; font-size: 12px; }
+  .btn .key { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-left: 8px; }
+  .spacer { flex: 1 1 auto; }
+
+  .mode {
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--line); border-radius: 4px;
+    padding: 4px 10px; font-size: 12.5px; font-family: var(--mono);
+    background: var(--panel-2); color: var(--muted);
+  }
+  .mode .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
+  .mode.building { color: var(--accent); border-color: var(--accent-dim); }
+  .mode.building .dot { background: var(--accent); }
+
+  /* кадры */
+  .stage { display: grid; grid-template-columns: 1fr 1fr; background: var(--video); }
+  .video {
+    position: relative; background: var(--video); aspect-ratio: 16 / 9;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .video .grid {
+    position: absolute; inset: 0; opacity: .5;
+    background:
+      repeating-linear-gradient(0deg,  rgba(255,255,255,.035) 0 1px, transparent 1px 46px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 46px);
+  }
+  .video .frameno {
+    font-family: var(--mono); font-size: 56px; font-weight: 700;
+    color: rgba(255,255,255,.13); letter-spacing: .04em; user-select: none;
+  }
+  .osd {
+    position: absolute; left: 12px; top: 10px; background: rgba(5,7,9,.66);
+    border-radius: 4px; padding: 3px 8px; font-family: var(--mono); font-size: 12px;
+    color: #f3f5fa; display: flex; gap: 7px;
+  }
+  .osd .a { color: var(--accent); font-weight: 700; }
+  .osd .bb { color: var(--trackb); font-weight: 700; }
+
+  /* ---------- развёрнутый таймлайн (как сейчас) ---------- */
+  .tlbar {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 6px 12px; background: var(--panel-2);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .tlbar .zoom { font-family: var(--mono); font-size: 12.5px; color: var(--muted); min-width: 66px; }
+  .tl { padding: 4px 12px; }
+  .ruler {
+    height: 26px; border-bottom: 1px solid var(--line); position: relative;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    font-family: var(--mono); font-size: 10.5px; color: var(--dim); padding-bottom: 3px;
+  }
+  .lane { position: relative; height: 54px; margin-top: 8px; }
+  .clip {
+    position: absolute; top: 0; bottom: 0; border-radius: 4px; overflow: hidden;
+    border: 1px solid var(--accent-dim);
+    background: repeating-linear-gradient(90deg, #1b2233 0 34px, #232b3f 34px 68px);
+  }
+  .clip.b { border-color: var(--trackb-dim);
+    background: repeating-linear-gradient(90deg, #172230 0 34px, #1e2c3d 34px 68px); }
+  .clip .letter {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 16px; display: grid; place-items: center;
+    background: var(--accent); color: #1a1206; font-family: var(--mono); font-weight: 700; font-size: 11px;
+  }
+  .clip.b .letter { background: var(--trackb); color: #06131c; }
+  .clip .built { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--ok); }
+  .clip .outside { position: absolute; top: 0; bottom: 0; background: rgba(5,7,11,.62); }
+  .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+
+  /* ---------- компактная полоса ---------- */
+  .cbar {
+    position: relative; height: 8px; border-radius: 4px;
+    background: var(--panel-2); border: 1px solid var(--line);
+  }
+  .cbar .seg  { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .cbar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 62%, transparent); border-radius: 4px 0 0 4px; }
+  .cbar .head { position: absolute; top: -5px; width: 3px; height: 18px; border-radius: 1.5px; background: var(--accent); }
+  .cbar .mark { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--dim); }
+
+  /* полоска инициализации кэша */
+  .cache-strip { margin-top: 4px; height: 3px; border-radius: 2px; background: var(--panel-2); overflow: hidden; }
+  .cache-strip > i { display: block; height: 100%; background: var(--ok); border-radius: 2px; }
+
+  /* компактный подвал */
+  .foot { padding: 9px 12px 9px; background: var(--panel); border-top: 1px solid var(--line); }
+  .foot.row { display: flex; align-items: center; gap: 10px; }
+  .foot .grow { flex: 1 1 auto; min-width: 0; }
+  .mbtn {
+    width: 24px; height: 22px; display: grid; place-items: center; flex: 0 0 auto;
+    background: transparent; border: 1px solid transparent; border-radius: 4px;
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+  .mbtn.play { color: var(--accent); border-color: var(--accent-dim); background: var(--panel-2); width: 28px; }
+  .mgroup { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+  .mtime { font-family: var(--mono); font-size: 13.5px; color: var(--text); white-space: nowrap; }
+  .mdur  { font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .mfr   { font-family: var(--mono); font-size: 11.5px; color: var(--accent); white-space: nowrap; }
+  .mfr.b { color: var(--trackb); }
+  .expand {
+    width: 24px; height: 22px; display: grid; place-items: center; flex: 0 0 auto;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px;
+    font-size: 10px; color: var(--muted);
+  }
+  .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+
+  /* подвал поверх кадра (вариант А3) */
+  .overlay-foot {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(to top, rgba(5,7,11,.92) 40%, rgba(5,7,11,0));
+    padding: 26px 12px 9px;
+  }
+  .overlay-foot .cbar { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.14); }
+
+  /* транспорт (развёрнутый) */
+  .transport { display: flex; align-items: center; gap: 6px; padding: 8px 14px 12px; flex-wrap: wrap; }
+  .tbtn {
+    width: 34px; height: 28px; display: grid; place-items: center;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .tbtn.play { width: 42px; color: var(--accent); border-color: var(--accent-dim); }
+  .time { font-family: var(--mono); font-size: 18px; margin-left: 6px; }
+  .dur  { font-family: var(--mono); font-size: 13px; color: var(--dim); }
+  .badge {
+    font-family: var(--mono); font-size: 12.5px; color: var(--accent);
+    border: 1px solid var(--accent-dim); border-radius: 4px; padding: 2px 8px; margin-left: 10px;
+  }
+  .badge.b { color: var(--trackb); border-color: var(--trackb-dim); margin-left: 6px; }
+  .status {
+    border-top: 1px solid var(--line); background: var(--panel-2);
+    padding: 6px 14px; font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  }
+
+  /* ---------- варианты ---------- */
+  .cols { display: grid; gap: 22px; }
+  .variant { display: flex; flex-direction: column; gap: 10px; }
+  .vhead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .vname { font-weight: 650; font-size: 16px; }
+  .vtag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 7px; color: var(--muted);
+  }
+  .vtag.rec  { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+  .vtag.done { color: var(--accent); border-color: var(--accent-dim); }
+  .vtag.no   { color: var(--dim); }
+  .variant > p { margin: 0; color: var(--muted); font-size: 14px; max-width: 72ch; }
+  .pros { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--muted); }
+  .pros li::marker { color: var(--dim); }
+
+  ul.plain { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 5px; }
+  ul.plain b { color: var(--text); font-weight: 600; }
+  kbd {
+    font-family: var(--mono); font-size: 11.5px; border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 3px; padding: 0 5px; color: var(--text);
+    background: var(--panel-2);
+  }
+  .decided {
+    border-left: 2px solid var(--ok); padding: 6px 0 6px 14px; color: var(--muted); font-size: 14px;
+  }
+  .decided b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Задача #18 · мокап · редакция 2</div>
+    <h1>Компактный вид прогресса</h1>
+    <p>Таймлайн с линейкой, дорожками и панелью инструментов плюс полноразмерный транспорт
+      занимают треть окна. Для обычного просмотра этого много: нужна свёрнутая
+      минималистичная полоса — <b>вместе с компактными кнопками и таймкодом</b>, — и новые
+      ролики должны открываться именно в ней. Под полосой — тонкая полоска готовности кэша.</p>
+    <div class="decided">
+      Решено в редакции 1: <b>вариант А</b> — одна полоса на оба трека;
+      <b>одна общая</b> полоска кэша; свёрнутый вид — <b>состояние при старте приложения</b>
+      (в течение сеанса выбор пользователя сохраняется).
+      Решено в редакции 2: компоновка подвала — <b>вариант А2</b> (полоса во всю ширину,
+      под ней компактный транспорт), <b>строка сообщений в компактном виде скрыта</b>.
+    </div>
+  </header>
+
+  <section>
+    <h2>Как сейчас — развёрнутый вид</h2>
+    <p>Панель зума и выравнивания (32 px) + линейка (30 px) + две дорожки по 62 px +
+      транспорт (52 px) ≈ 250 px постоянно занятой высоты.</p>
+
+    <div class="app">
+      <div class="toolbar">
+        <button class="btn primary">Открыть A<span class="key">Ctrl+O</span></button>
+        <button class="btn b">Открыть B</button>
+        <button class="btn">Сессия…</button>
+        <button class="btn">Рядом</button>
+        <div class="spacer"></div>
+        <span class="mode building"><span class="dot"></span>сборка кэша 42 %</span>
+        <button class="btn">Кэш…</button>
+      </div>
+
+      <div class="stage">
+        <div class="video">
+          <div class="grid"></div><div class="frameno">0412</div>
+          <div class="osd"><span class="a">A</span><span>before.mp4</span><span>кадр 412</span></div>
+        </div>
+        <div class="video">
+          <div class="grid"></div><div class="frameno">0400</div>
+          <div class="osd"><span class="bb">B</span><span>after.mp4</span><span>кадр 400</span></div>
+        </div>
+      </div>
+
+      <div class="tlbar">
+        <button class="btn sm">−</button><span class="zoom">1 : 1,0</span><button class="btn sm">+</button>
+        <button class="btn sm">Уместить</button><button class="btn sm">Снэп</button>
+        <button class="btn sm">Мастер: A</button>
+        <span style="font-size:12.5px;color:var(--muted);margin-left:6px">сдвиг B</span>
+        <button class="btn sm">−</button>
+        <span class="btn sm" style="font-family:var(--mono);color:var(--trackb)">−12</span>
+        <button class="btn sm">+</button>
+        <div class="spacer"></div>
+        <button class="btn sm">Начало отрезка</button><button class="btn sm">Конец отрезка</button>
+        <button class="btn sm">Петля</button>
+      </div>
+
+      <div class="tl">
+        <div class="ruler">
+          <span>00:00</span><span>00:07</span><span>00:15</span><span>00:22</span><span>00:30</span>
+        </div>
+        <div class="lane">
+          <div class="clip" style="left:0;right:0">
+            <div class="letter">A</div>
+            <div class="outside" style="left:0;width:9%"></div>
+            <div class="outside" style="right:0;width:14%"></div>
+            <div class="built" style="width:42%"></div>
+          </div>
+          <div class="playhead" style="left:46%"></div>
+        </div>
+        <div class="lane">
+          <div class="clip b" style="left:4%;right:2%">
+            <div class="letter">B</div>
+            <div class="built" style="width:100%"></div>
+          </div>
+          <div class="playhead" style="left:46%"></div>
+        </div>
+      </div>
+
+      <div class="transport">
+        <div class="tbtn">◀◀</div><div class="tbtn">◀|</div><div class="tbtn play">▶</div>
+        <div class="tbtn">|▶</div><div class="tbtn">▶▶</div>
+        <span class="time">00:00:13.733</span><span class="dur">/ 00:00:30.000</span>
+        <span class="badge">A 412</span><span class="badge b">B 400</span>
+        <button class="btn" style="margin-left:14px">В начало</button>
+        <span style="font-size:12.5px;color:var(--muted);margin-left:10px">скорость</span>
+        <button class="btn sm">−</button><span class="btn sm" style="font-family:var(--mono)">1</span><button class="btn sm">+</button>
+      </div>
+      <div class="status">кэш A: собрано 42 % · прокси 30 fps</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Компактный вид — варианты компоновки подвала</h2>
+    <p class="lead">Во всех трёх вариантах скрыты: панель зума и выравнивания, линейка,
+      дорожки, «В начало» и поле скорости. Кнопки транспорта уменьшены с 34×28 до 24×22 px
+      и лишены рамок (кроме «играть»), таймкод — с 18 до 13,5 px, номера кадров — простым
+      моноширинным текстом вместо рамок. Полоса кликается и тянется как playhead,
+      разворот — <span class="expand" style="display:inline-grid;vertical-align:middle">▾</span>
+      и <kbd>Ctrl+T</kbd>.</p>
+
+    <div class="cols">
+
+      <!-- А1 -->
+      <div class="variant">
+        <div class="vhead"><span class="vname">А1. Одна строка: кнопки · полоса · время</span>
+          <span class="vtag rec">рекомендую</span></div>
+        <p>Всё в один ряд высотой 40 px: слева компактный транспорт, посередине растянутая
+          полоса с полоской кэша под ней, справа таймкод и номера кадров. Минимум высоты
+          и ничего не прыгает.</p>
+        <div class="app">
+          <div class="stage">
+            <div class="video" style="aspect-ratio:16/7">
+              <div class="grid"></div><div class="frameno">0412</div>
+              <div class="osd"><span class="a">A</span><span>before.mp4</span></div>
+            </div>
+            <div class="video" style="aspect-ratio:16/7">
+              <div class="grid"></div><div class="frameno">0400</div>
+              <div class="osd"><span class="bb">B</span><span>after.mp4</span></div>
+            </div>
+          </div>
+          <div class="foot row">
+            <div class="mgroup">
+              <div class="mbtn">◀◀</div><div class="mbtn">◀|</div><div class="mbtn play">▶</div>
+              <div class="mbtn">|▶</div><div class="mbtn">▶▶</div>
+            </div>
+            <div class="grow">
+              <div class="cbar">
+                <div class="seg" style="left:9%;width:77%"></div>
+                <div class="fill" style="width:46%"></div>
+                <div class="mark" style="left:4%"></div>
+                <div class="mark" style="left:98%"></div>
+                <div class="head" style="left:calc(46% - 1.5px)"></div>
+              </div>
+              <div class="cache-strip"><i style="width:42%"></i></div>
+            </div>
+            <span class="mtime">00:00:13.733</span>
+            <span class="mdur">/ 30.000</span>
+            <div class="sep"></div>
+            <span class="mfr">A 412</span><span class="mfr b">B 400</span>
+            <div class="expand" title="Развернуть таймлайн (Ctrl+T)">▾</div>
+          </div>
+          <div class="status">кэш A: собрано 42 % · кэш B: готов</div>
+        </div>
+        <ul class="pros">
+          <li>+ высота подвала ~40 px вместо ~250 px</li>
+          <li>+ полоса всё равно занимает большую часть ширины — попадать мышью удобно</li>
+          <li>− на узком окне справа тесно: номера кадров придётся скрывать первыми</li>
+        </ul>
+      </div>
+
+      <!-- А2 -->
+      <div class="variant">
+        <div class="vhead"><span class="vname">А2. Две строки: полоса во всю ширину, под ней транспорт</span>
+          <span class="vtag rec">выбран</span></div>
+        <p>Полоса на всю ширину окна (легче попасть и точнее скраб), под ней ряд:
+          время слева, кнопки по центру, кадры и разворот справа. Высота ~62 px.
+          <b>Строка сообщений в компактном виде скрыта</b> — подвал заканчивается транспортом;
+          ход сборки кэша виден по полоске и по индикатору на панели инструментов.</p>
+        <div class="app">
+          <div class="stage">
+            <div class="video" style="aspect-ratio:16/7">
+              <div class="grid"></div><div class="frameno">0412</div>
+              <div class="osd"><span class="a">A</span><span>before.mp4</span></div>
+            </div>
+            <div class="video" style="aspect-ratio:16/7">
+              <div class="grid"></div><div class="frameno">0400</div>
+              <div class="osd"><span class="bb">B</span><span>after.mp4</span></div>
+            </div>
+          </div>
+          <div class="foot" style="padding-bottom:6px">
+            <div class="cbar">
+              <div class="seg" style="left:9%;width:77%"></div>
+              <div class="fill" style="width:46%"></div>
+              <div class="mark" style="left:4%"></div>
+              <div class="mark" style="left:98%"></div>
+              <div class="head" style="left:calc(46% - 1.5px)"></div>
+            </div>
+            <div class="cache-strip"><i style="width:42%"></i></div>
+          </div>
+          <div class="foot row" style="border-top:0;padding-top:4px">
+            <span class="mtime">00:00:13.733</span><span class="mdur">/ 00:00:30.000</span>
+            <div class="grow" style="display:flex;justify-content:center">
+              <div class="mgroup">
+                <div class="mbtn">◀◀</div><div class="mbtn">◀|</div><div class="mbtn play">▶</div>
+                <div class="mbtn">|▶</div><div class="mbtn">▶▶</div>
+              </div>
+            </div>
+            <span class="mfr">A 412</span><span class="mfr b">B 400</span>
+            <div class="expand">▾</div>
+          </div>
+        </div>
+        <ul class="pros">
+          <li>+ полоса во всю ширину — точнее скраб, ничто не жмётся на узком окне</li>
+          <li>+ без строки сообщений подвал тише: полоса, кэш, транспорт — и всё</li>
+          <li>− на 8 px выше варианта А1 (после отказа от строки сообщений)</li>
+        </ul>
+      </div>
+
+      <!-- А3 -->
+      <div class="variant">
+        <div class="vhead"><span class="vname">А3. Подвал поверх кадра, всплывает по мыши</span>
+          <span class="vtag">максимум кадра</span></div>
+        <p>Как в проигрывателях с полноэкранным режимом: строка лежит поверх нижней кромки
+          кадра и проявляется при движении мыши, иначе кадр занимает всё окно.</p>
+        <div class="app">
+          <div class="stage">
+            <div class="video" style="aspect-ratio:16/7.6">
+              <div class="grid"></div><div class="frameno">0412</div>
+              <div class="osd"><span class="a">A</span><span>before.mp4</span></div>
+            </div>
+            <div class="video" style="aspect-ratio:16/7.6">
+              <div class="grid"></div><div class="frameno">0400</div>
+              <div class="osd"><span class="bb">B</span><span>after.mp4</span></div>
+              <div class="overlay-foot">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div class="mgroup">
+                    <div class="mbtn" style="color:#cfd6e6">◀|</div>
+                    <div class="mbtn play">▶</div>
+                    <div class="mbtn" style="color:#cfd6e6">|▶</div>
+                  </div>
+                  <div class="grow">
+                    <div class="cbar">
+                      <div class="fill" style="width:46%"></div>
+                      <div class="head" style="left:calc(46% - 1.5px)"></div>
+                    </div>
+                    <div class="cache-strip" style="background:rgba(255,255,255,.12)"><i style="width:42%"></i></div>
+                  </div>
+                  <span class="mtime" style="color:#f3f5fa">00:13.733</span>
+                  <div class="expand">▾</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="status">кэш A: собрано 42 % · кэш B: готов</div>
+        </div>
+        <ul class="pros">
+          <li>+ кадр занимает всё окно, органов управления не видно, пока не нужны</li>
+          <li>− накладка ляжет на один из двух кадров (FlyleafHost рисует их отдельными
+            окнами вывода — по этой же причине в фазе 3 панели «Сведения» и «Кэш» унесли вбок);
+            для двух треков придётся дублировать её на оба или растягивать по низу окна</li>
+          <li>− мигание при каждом движении мыши мешает покадровому сравнению</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Что показывает полоса и полоска кэша</h2>
+    <ul class="plain">
+      <li><b>Заливка</b> — от начала шкалы до playhead; ярче — сам playhead.</li>
+      <li><b>Светлая область</b> — отрезок воспроизведения мастер-трека (in/out).</li>
+      <li><b>Засечки</b> — края клипа B на общей шкале: видно сдвиг, даже когда дорожек нет.</li>
+      <li><b>Полоска кэша</b> (3 px под полосой) — <b>одна общая</b>: показывает наименее
+        готовый из открытых треков. Пока идёт сборка — растёт слева направо; когда всё
+        собрано (или кэш не нужен) — исчезает совсем.</li>
+      <li>Подробности («кэш A — 42 %, осталось ~40 с», отмена) остаются в строке сообщений
+        и в панели «Кэш…», как сейчас.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Поведение</h2>
+    <ul class="plain">
+      <li><b>Старт приложения — компактный вид</b>, независимо от того, как окно закрыли.
+        Открытие следующего ролика в том же сеансе вид не меняет: развернул — осталось развёрнутым.</li>
+      <li><b>Переключение</b> — кнопка <span class="expand" style="display:inline-grid;vertical-align:middle">▾</span>
+        в правом углу подвала и <kbd>Ctrl+T</kbd>.</li>
+      <li><b>В компактном виде работают:</b> перетаскивание playhead по полосе, все клавиши
+        транспорта и шаттла, <kbd>I</kbd>/<kbd>O</kbd> (полоса перерисуется), скорость
+        и «в начало» — с клавиатуры.</li>
+      <li><b>Разворачивают автоматически</b> действия, которым нужен таймлайн: зум
+        (<kbd>+</kbd>/<kbd>−</kbd>/<kbd>F</kbd>) и правка сдвига (<kbd>Alt</kbd>+стрелки).</li>
+      <li><b>Строка сообщений</b> видна только в развёрнутом виде. В компактном её роль
+        делят полоска кэша и индикатор режима на панели инструментов; отказ открытия файла
+        и так показывается в панели трека (фаза 5).</li>
+    </ul>
+  </section>
+
+</div>
+</body>
+</html>

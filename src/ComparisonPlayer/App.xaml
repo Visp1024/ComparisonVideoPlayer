@@ -84,6 +84,27 @@
             <Setter Property="BorderBrush" Value="{StaticResource AccentDim}" />
         </Style>
 
+        <!-- Кнопки транспорта в компактном подвале (задача #18): мельче и без рамки —
+             в свёрнутом виде органы управления не должны спорить с кадром -->
+        <Style x:Key="MiniTransportButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,3,0" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        </Style>
+
+        <Style x:Key="MiniPlayButton" TargetType="Button" BasedOn="{StaticResource MiniTransportButton}">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Background" Value="{StaticResource Panel2Brush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AccentDim}" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+        </Style>
+
         <!-- Кнопка панели таймлайна: тот же вид, что и у кнопок инструментов, но мельче —
              их там десяток, и в полный размер строка перестаёт читаться -->
         <Style x:Key="TimelineButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">

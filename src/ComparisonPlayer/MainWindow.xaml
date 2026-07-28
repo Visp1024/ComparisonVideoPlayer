@@ -18,6 +18,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Панель инструментов -->
@@ -405,8 +406,10 @@
             </Border>
         </Grid>
 
-        <!-- Таймлайн: панель управления и сам контрол (линейка, дорожки, playhead) -->
-        <Grid Grid.Row="2">
+        <!-- Таймлайн: панель управления и сам контрол (линейка, дорожки, playhead).
+             В компактном виде (задача #18) вся эта область скрыта, вместо неё —
+             подвал строкой ниже. -->
+        <Grid x:Name="TimelineArea" Grid.Row="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -444,6 +447,10 @@
                     <Button x:Name="BtnOffsetReset" Style="{StaticResource TimelineButton}" Content="Сбросить сдвиг"
                             Click="OffsetReset_Click" ToolTip="Совместить начала треков (Alt+0)" />
 
+                    <Button x:Name="BtnCollapse" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
+                            Content="▾" Margin="10,0,0,0" Padding="9,1" Click="ToggleCompact_Click"
+                            ToolTip="Свернуть до полосы прогресса (Ctrl+T)" />
+
                     <TextBlock x:Name="TxtSegment" DockPanel.Dock="Right" VerticalAlignment="Center"
                                Margin="10,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="12.5"
                                Foreground="{StaticResource MutedBrush}" />
@@ -465,8 +472,59 @@
             <tl:TimelineControl x:Name="Timeline" Grid.Row="1" Margin="12,0,12,4" />
         </Grid>
 
+        <!-- Компактный подвал (задача #18): полоса прогресса во всю ширину, под ней
+             полоска инициализации кэша и ужатый транспорт. Заменяет собой и таймлайн,
+             и полноразмерный транспорт, и строку сообщений. -->
+        <Border x:Name="CompactFooter" Grid.Row="3" Visibility="Collapsed"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="12,8,12,6">
+            <StackPanel>
+                <tl:CompactBar x:Name="MiniBar" />
+
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtTimeMini" FontFamily="{StaticResource MonoFont}" FontSize="13.5"
+                                   VerticalAlignment="Center" />
+                        <TextBlock x:Name="TxtDurationMini" Margin="6,0,0,0" VerticalAlignment="Center"
+                                   FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                   Foreground="{StaticResource DimBrush}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="BtnShuttleBackMini" Style="{StaticResource MiniTransportButton}" Content="◀◀"
+                                Click="ShuttleBack_Click" ToolTip="Шаттл назад (J)" />
+                        <Button x:Name="BtnPrevMini" Style="{StaticResource MiniTransportButton}" Content="◀|"
+                                Click="StepPrev_Click" ToolTip="Шаг на кадр назад (←)" />
+                        <Button x:Name="BtnPlayMini" Style="{StaticResource MiniPlayButton}" Content="▶"
+                                Click="PlayPause_Click" ToolTip="Воспроизведение / пауза (Space)" />
+                        <Button x:Name="BtnNextMini" Style="{StaticResource MiniTransportButton}" Content="|▶"
+                                Click="StepNext_Click" ToolTip="Шаг на кадр вперёд (→)" />
+                        <Button x:Name="BtnShuttleFwdMini" Style="{StaticResource MiniTransportButton}" Content="▶▶"
+                                Click="ShuttleForward_Click" ToolTip="Шаттл вперёд (L)" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtFrameAMini" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                   VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" />
+                        <TextBlock x:Name="TxtFrameBMini" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                   FontSize="11.5" VerticalAlignment="Center"
+                                   Foreground="{StaticResource TrackBBrush}" />
+                        <Button x:Name="BtnExpand" Style="{StaticResource TimelineButton}" Content="▴"
+                                Margin="10,0,0,0" Padding="9,1" Click="ToggleCompact_Click"
+                                ToolTip="Развернуть таймлайн (Ctrl+T)" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+
         <!-- Транспорт -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="14,10,14,12" VerticalAlignment="Center">
+        <StackPanel x:Name="TransportRow" Grid.Row="4" Orientation="Horizontal" Margin="14,10,14,12"
+                    VerticalAlignment="Center">
             <Button x:Name="BtnShuttleBack" Style="{StaticResource TransportButton}" Content="◀◀"
                     Click="ShuttleBack_Click" ToolTip="Шаттл назад: повторное нажатие вдвое быстрее (J)" />
             <Button x:Name="BtnPrev" Style="{StaticResource TransportButton}" Content="◀|" Click="StepPrev_Click"
@@ -512,8 +570,8 @@
                     Margin="4,0,0,0" Click="SpeedUp_Click" ToolTip="Быстрее на 0,25×" />
         </StackPanel>
 
-        <!-- Строка сообщений -->
-        <Border Grid.Row="4" Background="{StaticResource Panel2Brush}"
+        <!-- Строка сообщений: в компактном виде скрыта вместе с таймлайном -->
+        <Border x:Name="StatusBar" Grid.Row="5" Background="{StaticResource Panel2Brush}"
                 BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="14,7">
             <TextBlock x:Name="TxtStatus" FontFamily="{StaticResource MonoFont}" FontSize="12"
                        Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />

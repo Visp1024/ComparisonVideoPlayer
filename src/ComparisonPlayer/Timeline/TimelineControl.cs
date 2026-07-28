@@ -916,13 +916,7 @@ public sealed class TimelineControl : FrameworkElement
         new(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Mono, size, brush,
             VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
-    private static Brush Res(string key, string fallback)
-    {
-        var brush = Application.Current?.TryFindResource(key) as Brush
-                    ?? new SolidColorBrush((Color)ColorConverter.ConvertFromString(fallback)!);
-        if (brush.CanFreeze) brush.Freeze();
-        return brush;
-    }
+    private static Brush Res(string key, string fallback) => TimelinePalette.Res(key, fallback);
 
     /// <summary>Диагональная штриховка для клеток, кадр которых ещё не снят.</summary>
     private static Brush MakeHatch()
