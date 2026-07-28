@@ -29,7 +29,14 @@ $project = Join-Path $root 'src\ComparisonPlayer\ComparisonPlayer.csproj'
 
 function Invoke-Git {
     param([Parameter(ValueFromRemainingArguments = $true)] [string[]] $GitArgs)
-    $out = & git -C $root @GitArgs 2>&1
+    # git пишет в stderr обычный ход дела («To https://...» при push, счётчики
+    # объектов при fetch). При $ErrorActionPreference = 'Stop' Windows PowerShell
+    # 5.1 считает такую строку ошибкой и валит скрипт на успешной команде —
+    # поэтому судим только по коду возврата.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try   { $out = & git -C $root @GitArgs 2>&1 }
+    finally { $ErrorActionPreference = $prev }
     if ($LASTEXITCODE -ne 0) { throw ("git {0} → {1}" -f ($GitArgs -join ' '), ($out -join "`n")) }
     return ($out -join "`n").Trim()
 }
