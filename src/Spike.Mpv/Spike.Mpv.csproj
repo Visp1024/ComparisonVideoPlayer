@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- .NET 9: на машине разработки нет SDK 8 (см. docs/spike-flyleaf.md, п. 5) -->
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- libmpv-2.dll собран только под x64 -->
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>Spike.Mpv</AssemblyName>
+    <RootNamespace>Spike.Mpv</RootNamespace>
+  </PropertyGroup>
+
+</Project>
