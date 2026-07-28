@@ -776,9 +776,9 @@ public sealed class TimelineControl : FrameworkElement
     }
 
     /// <summary>
-    /// Миниатюры фазы 4 внутри клипа: клетка показывает кадр своего места на шкале.
-    /// За краем собранного кэша кадров ещё нет — там штриховка, а не растянутая соседка:
-    /// иначе полоска врала бы о том, какая часть ролика разобрана.
+    /// Миниатюры внутри клипа: клетка показывает кадр своего места на шкале. За краем
+    /// снятого кадров ещё нет — там штриховка, а не растянутая соседка: иначе полоска
+    /// врала бы о том, какая часть ролика разобрана.
     /// </summary>
     private void DrawThumbnails(DrawingContext dc, TimelineTrackView view, Rect clip)
     {
@@ -786,7 +786,7 @@ public sealed class TimelineControl : FrameworkElement
 
         var cellWidth = Math.Max(clip.Height * view.Aspect, 8);
         var length = Math.Max(view.EndFrame - view.StartFrame, 1);
-        var builtFrame = view.StartFrame + view.BuiltFraction * length;
+        var takenFrame = view.StartFrame + view.ThumbFraction * length;
 
         for (var x = clip.Left; x < clip.Right; x += cellWidth)
         {
@@ -795,7 +795,7 @@ public sealed class TimelineControl : FrameworkElement
 
             var frame = XToFrameExact(x + cell.Width / 2);
 
-            if (frame > builtFrame)
+            if (frame > takenFrame)
             {
                 dc.DrawRectangle(Pending, null, cell);
                 continue;

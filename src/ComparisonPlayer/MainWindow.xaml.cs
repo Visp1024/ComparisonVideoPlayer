@@ -214,7 +214,11 @@ public partial class MainWindow : Window
         App.Settings.SnapToFrames = Timeline.SnapEnabled;
         App.Settings.Save();
 
-        foreach (var track in _sync.Tracks) CancelBuild(track);
+        foreach (var track in _sync.Tracks)
+        {
+            CancelBuild(track);
+            CancelThumbnails(track);
+        }
 
         _sync.Dispose();
         _a.Dispose();
@@ -508,6 +512,7 @@ public partial class MainWindow : Window
         // Открытие всегда начинается с прямого декода: решение о кэше принимается
         // после того, как файл открылся и стали известны кодек и число кадров.
         CancelBuild(track);
+        CancelThumbnails(track);
         track.ResetCacheState();
         UseDirectBackend(track);
 
@@ -558,6 +563,7 @@ public partial class MainWindow : Window
 
         StopShuttle();
         CancelBuild(track);
+        CancelThumbnails(track);
         track.Backend.Close();
         UseDirectBackend(track);
         track.ResetCacheState();
@@ -706,6 +712,7 @@ public partial class MainWindow : Window
                 OutFrame = _sync.ToTimeline(track, track.OutFrame),
                 BuiltFraction = track.BuiltFraction,
                 HasThumbnails = track.HasThumbnails,
+                ThumbFraction = track.ThumbFraction,
                 Aspect = track.Media is { Height: > 0 } m ? m.Width / (double)m.Height : 16 / 9.0,
                 ThumbnailProvider = time => ThumbnailAt(track, time)
             });

@@ -65,7 +65,12 @@ public partial class MainWindow
 
         // Развернувшийся таймлайн получает ширину только сейчас — до этого он был
         // скрыт, и масштаб «вся шкала в ширину окна» посчитать было не по чему.
-        if (!_compact) Timeline.FitAll();
+        // Здесь же лениво снимаются превью: в свёрнутом виде их некуда показывать.
+        if (!_compact)
+        {
+            Timeline.FitAll();
+            RefreshThumbnails();
+        }
 
         RefreshCompactBar();
         UpdatePosition();

@@ -19,11 +19,21 @@ public sealed class FrameCacheStore
 
     public string DirectoryFor(string key) => Path.Combine(Root, key);
 
-    /// <summary>Готовая запись по ключу либо null: нет папки, нет прокси или битый entry.json.</summary>
+    /// <summary>Готовая запись с прокси либо null: нет папки, нет прокси или битый entry.json.</summary>
     public CacheEntry? Find(string key)
     {
         var entry = Read(DirectoryFor(key));
-        return entry is not null && File.Exists(entry.ProxyPath) ? entry : null;
+        return entry is { ThumbnailsOnly: false } && File.Exists(entry.ProxyPath) ? entry : null;
+    }
+
+    /// <summary>
+    /// Готовая полоска превью по её ключу либо null. Ключ у превью свой, от параметров
+    /// прокси не зависящий, поэтому запись переживает смену частоты кэша.
+    /// </summary>
+    public CacheEntry? FindThumbnails(string key)
+    {
+        var entry = Read(DirectoryFor(key));
+        return entry is { ThumbnailsOnly: true } && entry.ThumbnailFiles().Count > 0 ? entry : null;
     }
 
     public void Save(CacheEntry entry)
@@ -56,13 +66,15 @@ public sealed class FrameCacheStore
 
     /// <summary>
     /// Убрать самые давно не открывавшиеся записи, пока объём не уложится в лимит.
-    /// Запись <paramref name="keepKey"/> (обычно — открытый сейчас файл) не трогаем никогда.
+    /// Записи <paramref name="keepKeys"/> не трогаем никогда: это открытые сейчас файлы,
+    /// у каждого из которых своих записей две — прокси и полоска превью.
     /// </summary>
     /// <returns>Сколько записей удалено.</returns>
-    public int Trim(long limitBytes, string? keepKey = null)
+    public int Trim(long limitBytes, params string?[] keepKeys)
     {
         if (limitBytes <= 0) return 0;   // лимит выключен
 
+        var keep = keepKeys.Where(k => !string.IsNullOrEmpty(k)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var entries = All().OrderByDescending(e => e.LastUsedUtc).ToList();
         var total = entries.Sum(e => e.Bytes);
         var removed = 0;
@@ -71,7 +83,7 @@ public sealed class FrameCacheStore
         for (var i = entries.Count - 1; i >= 0 && total > limitBytes; i--)
         {
             var entry = entries[i];
-            if (entry.Key == keepKey) continue;
+            if (keep.Contains(entry.Key)) continue;
 
             if (!Remove(entry.Key)) continue;
             total -= entry.Bytes;

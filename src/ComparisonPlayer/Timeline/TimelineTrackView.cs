@@ -37,6 +37,9 @@ public sealed class TimelineTrackView
 
     public bool HasThumbnails { get; init; }
 
+    /// <summary>Доля клипа, для которой превью уже сняты: дальше неё идёт штриховка.</summary>
+    public double ThumbFraction { get; init; }
+
     /// <summary>Соотношение сторон кадра — по нему считается ширина клетки миниатюр.</summary>
     public double Aspect { get; init; } = 16 / 9.0;
 

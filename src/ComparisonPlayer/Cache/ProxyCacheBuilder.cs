@@ -6,7 +6,7 @@ using ComparisonPlayer.Playback;
 
 namespace ComparisonPlayer.Cache;
 
-/// <summary>Этап сборки: сначала прокси, потом миниатюры.</summary>
+/// <summary>Что именно снимает ffmpeg: прокси кэша или полоску превью.</summary>
 public enum BuildStage
 {
     Proxy,
@@ -23,14 +23,21 @@ public readonly record struct BuildProgress(
     BuildStage Stage, double Percent, long Frame, long Total, TimeSpan Eta, double Speed);
 
 /// <summary>
-/// Сборка дискового кэша через ffmpeg CLI: all-intra прокси плюс полоска миниатюр.
-/// Прокси пишется во временный файл и переименовывается по завершении — прерванная
-/// сборка не оставляет после себя запись, которую можно принять за готовую.
+/// Сборка через ffmpeg CLI: all-intra прокси кэша и полоска превью для таймлайна.
+/// Это две независимые записи с разными ключами — превью нужны и там, где прокси
+/// не собирается вовсе, поэтому одна не является этапом другой.
 /// </summary>
 public sealed class ProxyCacheBuilder(FrameCacheStore store)
 {
     /// <summary>Версия набора параметров кодирования; меняется вместе с ними.</summary>
     public const string Version = "h264-intra-crf20-yuv420p-v1";
+
+    /// <summary>
+    /// Подпись параметров полоски превью — она же ключ записи с ними. От параметров
+    /// прокси не зависит намеренно: превью одного и того же файла одинаковы при любой
+    /// частоте кэша и при выключенном кэше, пересниматься из-за неё им незачем.
+    /// </summary>
+    public const string ThumbnailVersion = "thumbs-h72-v1";
 
     /// <summary>
     /// Подпись параметров прокси. Входит в ключ кэша: меняем параметры или частоту —
@@ -54,9 +61,8 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
     /// <param name="media">Сведения об исходнике (нужны частота и число кадров для прогресса).</param>
     /// <param name="key">Ключ записи — он же имя папки.</param>
     /// <param name="targetFps">Частота прокси; 0 — как в исходнике.</param>
-    /// <param name="withThumbnails">Строить ли полоску миниатюр вторым этапом.</param>
     public async Task<CacheEntry> BuildAsync(
-        MediaInfo media, string key, double targetFps, bool withThumbnails,
+        MediaInfo media, string key, double targetFps,
         IProgress<BuildProgress>? progress, CancellationToken ct)
     {
         var dir = store.DirectoryFor(key);
@@ -71,21 +77,7 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
         var fps = targetFps > 0 ? targetFps : media.Fps;
         var totalFrames = ExpectedFrames(media, fps);
 
-        // Миниатюры идут параллельно и снимаются с исходника: полоска кадров
-        // должна появиться в первые секунды, а не через минуту после прокси.
-        var thumbnails = withThumbnails
-            ? BuildThumbnailsAsync(media, totalFrames, dir, ct)
-            : Task.FromResult((0, 0.0));
-
-        try
-        {
-            await RunAsync(ProxyArgs(media, fps, proxy), totalFrames, BuildStage.Proxy, progress, ct);
-        }
-        catch (Exception)
-        {
-            await Ignore(thumbnails);
-            throw;
-        }
+        await RunAsync(ProxyArgs(media, fps, proxy), totalFrames, BuildStage.Proxy, progress, ct);
 
         var entry = new CacheEntry
         {
@@ -105,19 +97,50 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
             LastUsedUtc = DateTime.UtcNow
         };
 
-        var (count, interval) = await thumbnails;
-        entry.ThumbnailCount = count;
-        entry.ThumbnailIntervalSeconds = interval;
-
         store.Save(entry);
         return entry;
     }
 
-    /// <summary>Дождаться побочной задачи, не подменяя ею исходную ошибку.</summary>
-    private static async Task Ignore(Task task)
+    /// <summary>
+    /// Снять полоску превью отдельной записью, без прокси. Так они появляются в любом
+    /// режиме — в том числе при выключенном кэше, где иначе клип на таймлайне остаётся
+    /// пустым. Запись сохраняется в конце: недоснятая полоска не должна выглядеть готовой.
+    /// </summary>
+    /// <param name="media">Исходник, с которого снимаем кадры.</param>
+    /// <param name="key">Ключ записи с превью — он же имя папки.</param>
+    public async Task<CacheEntry> BuildThumbnailsOnlyAsync(
+        MediaInfo media, string key, IProgress<BuildProgress>? progress, CancellationToken ct)
     {
-        try { await task; }
-        catch (Exception) { /* прокси уже упал или отменён — судьба миниатюр не важна */ }
+        var dir = store.DirectoryFor(key);
+        Directory.CreateDirectory(dir);
+        SafeDelete(Path.Combine(dir, "entry.json"));
+
+        var (count, interval) = await BuildThumbnailsAsync(media, media.FrameCount, dir, progress, ct);
+
+        var entry = new CacheEntry
+        {
+            Key = key,
+            Directory = dir,
+            SourcePath = media.FilePath,
+            SourceLength = SafeLength(media.FilePath),
+            Codec = media.Codec,
+            Width = media.Width,
+            Height = media.Height,
+            SourceFps = media.Fps,
+            Fps = media.Fps,
+            FrameCount = media.FrameCount,
+            DurationTicks = media.Duration.Ticks,
+            ProxyFile = "",
+            ThumbnailsOnly = true,
+            ThumbnailCount = count,
+            ThumbnailIntervalSeconds = interval,
+            Parameters = ThumbnailVersion,
+            CreatedUtc = DateTime.UtcNow,
+            LastUsedUtc = DateTime.UtcNow
+        };
+
+        store.Save(entry);
+        return entry;
     }
 
     /// <summary>
@@ -169,15 +192,14 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
     }
 
     /// <summary>
-    /// Миниатюры снимаются с исходника параллельно со сборкой прокси: полоска кадров
-    /// нужна сразу, а ждать готового прокси — это минуты на длинном ролике. Кадров
-    /// берём столько, чтобы хватило на ширину полосы и не больше — секундный шаг
-    /// на часовом ролике дал бы 3600 файлов.
+    /// Миниатюры снимаются с исходника одним проходом ffmpeg. Кадров берём столько,
+    /// чтобы хватило на ширину полосы и не больше: секундный шаг на часовом ролике
+    /// дал бы 3600 файлов.
     /// </summary>
-    private async Task<(int Count, double Interval)> BuildThumbnailsAsync(
-        MediaInfo media, long proxyFrames, string dir, CancellationToken ct)
+    private static async Task<(int Count, double Interval)> BuildThumbnailsAsync(
+        MediaInfo media, long frames, string dir, IProgress<BuildProgress>? progress, CancellationToken ct)
     {
-        var (count, interval) = ThumbnailPlan(media.Duration, proxyFrames);
+        var (count, interval) = ThumbnailPlan(media.Duration, frames);
         if (count == 0) return (0, 0);
 
         var thumbs = Path.Combine(dir, "thumbs");
@@ -189,7 +211,7 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
                    $"-map 0:v:0 -vf \"fps={fps},scale=-2:{ThumbnailHeight}\" -q:v 4 " +
                    $"-progress pipe:1 -nostats \"{Path.Combine(thumbs, "%05d.jpg")}\"";
 
-        await RunAsync(args, count, BuildStage.Thumbnails, null, ct);
+        await RunAsync(args, count, BuildStage.Thumbnails, progress, ct);
 
         return (Directory.GetFiles(thumbs, "*.jpg").Length, interval);
     }

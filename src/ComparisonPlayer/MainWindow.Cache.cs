@@ -89,12 +89,6 @@ public partial class MainWindow
     {
         if (!track.IsOpen || track.Media is not { } media) return;
 
-        if (App.Settings.CacheMode == FrameCacheMode.Never)
-        {
-            UpdateModeBadges();
-            return;
-        }
-
         try
         {
             track.CacheKey = CacheKey.For(path, ProxyCacheBuilder.Signature(App.Settings.CacheFps));
@@ -103,10 +97,22 @@ public partial class MainWindow
             // ключ не зависит от параметров сборки: смена частоты прокси не
             // должна приводить к повторному замеру того же файла.
             track.ProbeKey = CacheKey.For(path, ProbeParameters);
+
+            // Превью нужны в любом режиме, поэтому их ключ считается даже тогда,
+            // когда прокси не будет вовсе.
+            track.ThumbKey = CacheKey.For(path, ProxyCacheBuilder.ThumbnailVersion);
         }
         catch (Exception ex)
         {
             Status($"{track.Letter}: кэш недоступен, не прочитать файл ({ex.Message})");
+            return;
+        }
+
+        RequestThumbnails(track);
+
+        if (App.Settings.CacheMode == FrameCacheMode.Never)
+        {
+            UpdateModeBadges();
             return;
         }
 
@@ -190,13 +196,12 @@ public partial class MainWindow
         _building = track;
 
         ShowBuildBar(true);
-        ShowThumbnails(track, []);   // клип заполняется кадрами по мере сборки
         UpdateModeBadges();
         UpdateCachePanel();
 
         var progress = new Progress<BuildProgress>(p => OnBuildProgress(track, p));
 
-        Task.Run(() => Builder.BuildAsync(media, key, App.Settings.CacheFps, withThumbnails: true, progress, cts.Token), cts.Token)
+        Task.Run(() => Builder.BuildAsync(media, key, App.Settings.CacheFps, progress, cts.Token), cts.Token)
             .ContinueWith(task => OnBuildFinished(track, task, key, cts),
                 CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
     }
@@ -214,19 +219,6 @@ public partial class MainWindow
             $"{track.Letter}: {progress.Frame} / {progress.Total} кадров" +
             (progress.Eta > TimeSpan.Zero ? $" · осталось ~{Eta(progress.Eta)}" : "") +
             (progress.Speed > 0 ? $" · {progress.Speed:F2}× реального времени" : "");
-
-        // Миниатюры строятся параллельно с прокси и показываются по мере появления;
-        // последний файл может быть ещё недописан, поэтому его пропускаем.
-        if (track.CacheKey is { } key)
-        {
-            var dir = Path.Combine(_cacheStore.DirectoryFor(key), "thumbs");
-            if (Directory.Exists(dir))
-            {
-                var files = Directory.GetFiles(dir, "*.jpg");
-                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-                if (files.Length > 1) ShowThumbnails(track, files[..^1]);
-            }
-        }
 
         if (progress.Stage == BuildStage.Proxy)
         {
@@ -366,7 +358,9 @@ public partial class MainWindow
         if (current && track.CacheKey == key)
         {
             var entry = task.Result;
-            var freed = _cacheStore.Trim(CacheLimitBytes, key);
+
+            // Вытеснению не отдаём ни прокси, ни превью открытых сейчас файлов.
+            var freed = _cacheStore.Trim(CacheLimitBytes, key, _a.ThumbKey, _b.ThumbKey);
             var note = freed > 0 ? $", вытеснено записей: {freed}" : "";
 
             UseCacheBackend(track, entry, $"{track.Letter}: кэш собран ({Size(entry.Bytes)}){note}");
@@ -466,7 +460,6 @@ public partial class MainWindow
             track.Backend.SeekToFrame(frame);
 
             track.BuiltFraction = 1;
-            ShowThumbnails(track, entry.ThumbnailFiles());
         }
 
         UpdateState();
@@ -611,8 +604,8 @@ public partial class MainWindow
             if (track.Backend is FrameCacheBackend)
                 PlayFromSource(track, $"{track.Letter}: частота прокси {FpsName(fps)} — пересобираю кэш");
 
+            // Превью не пересматриваем: они сняты с исходника и от частоты прокси не зависят.
             track.CacheEntry = null;
-            ClearThumbnails(track);
             DecideCache(track, source);
         }
     }
@@ -636,7 +629,6 @@ public partial class MainWindow
             catch (Exception ex) { Status($"{track.Letter}: кэш недоступен — {ex.Message}"); return; }
         }
 
-        ClearThumbnails(track);
         if (track.Flyleaf.Media is { } media) StartBuild(track, media);
     }
 
@@ -674,9 +666,10 @@ public partial class MainWindow
     {
         foreach (var track in _sync.Tracks) CancelBuild(track);
 
-        // Записи открытых файлов не трогаем: удалять прокси из-под играющего плеера нельзя.
+        // Записи открытых файлов не трогаем: удалять прокси из-под играющего плеера
+        // нельзя, а превью пришлось бы тут же снимать заново.
         var keep = _sync.Tracks
-            .Select(t => t.Backend is FrameCacheBackend cache ? cache.Entry.Key : null)
+            .SelectMany(t => new[] { t.Backend is FrameCacheBackend cache ? cache.Entry.Key : null, t.ThumbKey })
             .Where(k => k is not null)
             .Cast<string>()
             .ToArray();
@@ -826,29 +819,134 @@ public partial class MainWindow
         CacheStorageBar.Value = limit > 0 ? Math.Clamp(used * 100.0 / limit, 0, 100) : 0;
     }
 
-    // ---------- миниатюры ----------
+    // ---------- превью кадров ----------
 
     /// <summary>
-    /// Отдать таймлайну те миниатюры трека, что уже сняты. Пустой список — тоже
-    /// состояние: клип рисуется штриховкой и заполняется кадрами по мере сборки.
+    /// Позвать превью на все открытые треки. Точка ленивого запуска: пока таймлайн
+    /// свёрнут, показывать кадры негде, поэтому и снимать их незачем — вызывается
+    /// при разворачивании таймлайна и после открытия файла.
     /// </summary>
-    private void ShowThumbnails(PlayerTrack track, IReadOnlyList<string> files)
+    private void RefreshThumbnails()
     {
-        track.ThumbFiles = files;
+        foreach (var track in _sync.OpenTracks.ToList()) RequestThumbnails(track);
+    }
 
-        if (track.Media is { } media && media.Duration > TimeSpan.Zero)
+    /// <summary>
+    /// Показать полоску превью трека: сначала ищем готовую запись на диске, иначе
+    /// снимаем кадры одним проходом ffmpeg. Превью не зависят от кэша кадров и
+    /// снимаются в любом режиме — в прямом декоде клипу больше нечего показать,
+    /// а весят они мегабайты против гигабайтов прокси.
+    /// </summary>
+    private void RequestThumbnails(PlayerTrack track)
+    {
+        // Свёрнутый таймлайн кадров не показывает — ffmpeg в это время не нужен.
+        // Развернут он будет через ApplyCompact, который сюда и вернётся.
+        if (_compact) return;
+
+        if (track.ThumbKey is not { } key || track.ThumbCts is not null) return;
+        if (track.Media is not { } media || media.Duration <= TimeSpan.Zero) return;
+        if (track.ThumbFiles.Count > 0) return;
+
+        if (_cacheStore.FindThumbnails(key) is { } ready)
         {
-            var (planned, interval) = ProxyCacheBuilder.ThumbnailPlan(media.Duration, media.FrameCount);
-            track.ThumbInterval = planned > 0 ? interval : 0;
+            _cacheStore.Touch(ready);
+            ShowThumbnails(track, ready.ThumbnailFiles(), ready.ThumbnailIntervalSeconds, 1);
+            return;
         }
 
-        track.HasThumbnails = files.Count > 0 || track.BuildCts is not null;
+        if (!File.Exists(AppEnv.FFmpegExe) && AppEnv.FFmpegExe != "ffmpeg") return;
+
+        var (planned, interval) = ProxyCacheBuilder.ThumbnailPlan(media.Duration, media.FrameCount);
+        if (planned == 0) return;
+
+        var cts = new CancellationTokenSource();
+        track.ThumbCts = cts;
+
+        // Пустой список — тоже состояние: клип штрихуется и заполняется по мере съёмки.
+        ShowThumbnails(track, [], interval, 0);
+
+        var progress = new Progress<BuildProgress>(_ => FollowThumbnails(track, key, interval, planned));
+
+        Task.Run(() => Builder.BuildThumbnailsOnlyAsync(media, key, progress, cts.Token), cts.Token)
+            .ContinueWith(task => OnThumbnailsFinished(track, task, key),
+                CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    /// <summary>
+    /// Показать кадры, снятые к этому моменту. Последний файл может быть ещё недописан
+    /// ffmpeg'ом, поэтому его пропускаем — иначе клетка мигала бы обрезанной картинкой.
+    /// </summary>
+    private void FollowThumbnails(PlayerTrack track, string key, double interval, int planned)
+    {
+        if (track.ThumbCts is null || track.ThumbKey != key) return;
+
+        var dir = Path.Combine(_cacheStore.DirectoryFor(key), "thumbs");
+        if (!Directory.Exists(dir)) return;
+
+        var files = Directory.GetFiles(dir, "*.jpg");
+        if (files.Length < 2) return;
+
+        Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+        var taken = files[..^1];
+
+        ShowThumbnails(track, taken, interval, planned > 0 ? taken.Length / (double)planned : 0);
+    }
+
+    private void OnThumbnailsFinished(PlayerTrack track, Task<CacheEntry> task, string key)
+    {
+        // Пока снимали, файл могли закрыть или сменить — тогда результат уже чужой.
+        var mine = track.ThumbKey == key;
+        track.ThumbCts = null;
+
+        if (task.IsCanceled || task.IsFaulted)
+        {
+            // Недоснятую полоску на диске не держим: без entry.json она всё равно
+            // не найдётся, зато папка с кадрами осталась бы вне учёта объёма.
+            _cacheStore.Remove(key);
+            if (!mine) return;
+
+            ClearThumbnails(track);
+
+            if (!task.IsCanceled && task.Exception?.InnerException is not OperationCanceledException)
+            {
+                Status($"{track.Letter}: превью кадров не сняты — " +
+                       $"{task.Exception?.InnerException?.Message ?? "неизвестная ошибка"}");
+                return;
+            }
+
+            // Ключ тот же, а съёмку прервали — значит, тот же файл открыли заново,
+            // пока она шла. Полоска ему всё ещё нужна, снимаем заново.
+            RequestThumbnails(track);
+            return;
+        }
+
+        if (!mine) return;
+
+        var entry = task.Result;
+        ShowThumbnails(track, entry.ThumbnailFiles(), entry.ThumbnailIntervalSeconds, 1);
+        UpdateCachePanel();
+    }
+
+    /// <summary>Прекратить съёмку превью: файл закрывают или меняют, снятое уже не нужно.</summary>
+    private void CancelThumbnails(PlayerTrack track) => track.ThumbCts?.Cancel();
+
+    /// <summary>
+    /// Отдать таймлайну снятые кадры трека вместе с их шагом по времени и долей клипа,
+    /// которую они покрывают: дальше этой доли клип штрихуется.
+    /// </summary>
+    private void ShowThumbnails(PlayerTrack track, IReadOnlyList<string> files, double interval, double fraction)
+    {
+        track.ThumbFiles = files;
+        track.ThumbInterval = interval;
+        track.ThumbFraction = Math.Clamp(fraction, 0, 1);
+        track.HasThumbnails = files.Count > 0 || track.ThumbCts is not null;
+
         RefreshTimeline();
     }
 
     /// <summary>
     /// Миниатюра для момента ролика: клетка клипа спрашивает кадр своего места на шкале.
-    /// null — кадр ещё не снят (сборка досюда не дошла), и клетка остаётся заштрихованной.
+    /// null — кадр ещё не снят (съёмка досюда не дошла), и клетка остаётся заштрихованной.
     /// </summary>
     private ImageSource? ThumbnailAt(PlayerTrack track, TimeSpan time)
     {
@@ -864,6 +962,7 @@ public partial class MainWindow
     {
         track.ThumbFiles = [];
         track.ThumbInterval = 0;
+        track.ThumbFraction = 0;
         track.ThumbImages.Clear();
         track.HasThumbnails = false;
 

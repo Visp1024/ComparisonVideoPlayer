@@ -149,11 +149,23 @@ public sealed class PlayerTrack : IDisposable
     /// <summary>Сколько кадров прокси уже записано ffmpeg'ом; 0 — сборки нет.</summary>
     public long BuiltFrames { get; set; }
 
+    /// <summary>Ключ записи с превью открытого файла. От параметров прокси не зависит.</summary>
+    public string? ThumbKey { get; set; }
+
+    /// <summary>Идущая съёмка превью этого трека; null — не снимаем.</summary>
+    public CancellationTokenSource? ThumbCts { get; set; }
+
     /// <summary>Все снятые миниатюры файла.</summary>
     public IReadOnlyList<string> ThumbFiles { get; set; } = [];
 
     /// <summary>Шаг между миниатюрами по времени, секунд; 0 — плана нет.</summary>
     public double ThumbInterval { get; set; }
+
+    /// <summary>
+    /// Докуда полоска превью уже снята, 0..1. Отдельно от <see cref="BuiltFraction"/>:
+    /// превью снимаются и без прокси, и штриховка клипа отвечает именно за них.
+    /// </summary>
+    public double ThumbFraction { get; set; }
 
     /// <summary>Декодированные миниатюры: клип перерисовывается на каждый зум и шаг.</summary>
     public Dictionary<string, ImageSource> ThumbImages { get; } = [];
@@ -173,8 +185,10 @@ public sealed class PlayerTrack : IDisposable
         BuildEta = "";
         BuiltFrames = 0;
         BuiltFraction = 0;
+        ThumbKey = null;
         ThumbFiles = [];
         ThumbInterval = 0;
+        ThumbFraction = 0;
         ThumbImages.Clear();
         HasThumbnails = false;
     }
