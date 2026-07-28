@@ -15,9 +15,24 @@ public static class AppEnv
         ?? Environment.GetEnvironmentVariable("SPIKE_FFMPEG_DIR")
         ?? Probe(
             Path.Combine(AppContext.BaseDirectory, "FFmpeg"),
-            @"D:\PROJECTS\_tools\ffmpeg-n7.1-latest-win64-gpl-shared-7.1\bin",
+            RepoFFmpegDir(),
             @"C:\ffmpeg\bin")
         ?? "";
+
+    /// <summary>
+    /// Каталог FFmpeg внутри репозитория (tools/ffmpeg/bin) — им пользуется запуск из
+    /// bin/Debug при разработке. Ищем вверх от каталога сборки, потому что глубина
+    /// bin/&lt;конфигурация&gt;/&lt;tfm&gt;/&lt;rid&gt; относительно корня меняется.
+    /// </summary>
+    private static string? RepoFFmpegDir()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "tools", "ffmpeg", "bin");
+            if (Directory.Exists(candidate)) return candidate;
+        }
+        return null;
+    }
 
     /// <summary>
     /// Исполняемый файл ffmpeg для сборки кэша кадров. Рядом с нативными библиотеками
@@ -42,6 +57,6 @@ public static class AppEnv
     /// <summary>Запомненные замеры скорости шага назад, чтобы не мерить один файл дважды.</summary>
     public static string ProbeFile => Path.Combine(DataDir, "probes.json");
 
-    private static string? Probe(params string[] candidates)
-        => candidates.FirstOrDefault(Directory.Exists);
+    private static string? Probe(params string?[] candidates)
+        => candidates.FirstOrDefault(c => c is not null && Directory.Exists(c));
 }

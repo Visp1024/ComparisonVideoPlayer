@@ -1,5 +1,7 @@
 bin/
 obj/
+# Нативные библиотеки FFmpeg (n7.1 win64 gpl shared), качаются отдельно — см. tools/publish.ps1
+tools/ffmpeg/
 publish/
 *.user
 .vs/

@@ -34,14 +34,15 @@ if (-not (Test-Path -LiteralPath $project)) { throw "не найден прое�
 
 if (-not $OutDir) { $OutDir = Join-Path $root "publish\$Runtime" }
 
-# Каталог FFmpeg: явный ключ -> переменные окружения приложения -> известные места.
+# Каталог FFmpeg: явный ключ -> переменные окружения приложения -> tools\ffmpeg\bin в
+# репозитории (в git не хранится, распаковывается из ffmpeg-n7.1-*-win64-gpl-shared).
 if (-not $NoFFmpeg -and -not $FFmpegDir) {
     # @(...) вокруг результата обязательно: один найденный путь иначе станет строкой,
     # и [0] вернёт первый символ вместо каталога.
     $candidates = @(@(
         $env:COMPARISONPLAYER_FFMPEG_DIR,
         $env:SPIKE_FFMPEG_DIR,
-        'D:\PROJECTS\_tools\ffmpeg-n7.1-latest-win64-gpl-shared-7.1\bin',
+        (Join-Path $root 'tools\ffmpeg\bin'),
         'C:\ffmpeg\bin'
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) })
     if ($candidates.Count -gt 0) { $FFmpegDir = $candidates[0] }
