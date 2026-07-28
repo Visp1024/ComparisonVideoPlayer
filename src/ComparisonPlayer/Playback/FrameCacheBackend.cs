@@ -119,6 +119,7 @@ public sealed class FrameCacheBackend(FlyleafBackend inner, CacheEntry entry) : 
     public void StepBack(int frames = 1) => inner.StepBack(frames);
     public void SeekToFrame(long frame) => inner.SeekToFrame(frame);
     public void SeekTo(TimeSpan position) => inner.SeekTo(position);
+    public void NudgeTo(TimeSpan position) => inner.NudgeTo(position);
 
     private void OnPositionChanged(object? sender, EventArgs e) => PositionChanged?.Invoke(this, EventArgs.Empty);
     private void OnStateChanged(object? sender, EventArgs e) => StateChanged?.Invoke(this, EventArgs.Empty);

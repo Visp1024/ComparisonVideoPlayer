@@ -6,14 +6,37 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ComparisonPlayer.Playback;
+using ComparisonPlayer.Timeline;
+using ComparisonPlayer.Tracks;
 using Microsoft.Win32;
 
 namespace ComparisonPlayer;
 
+/// <summary>Что показано в области кадра.</summary>
+public enum LayoutMode
+{
+    /// <summary>Оба кадра рядом — основной режим сравнения.</summary>
+    Side,
+
+    /// <summary>Только трек A во всю ширину.</summary>
+    OnlyA,
+
+    /// <summary>Только трек B во всю ширину.</summary>
+    OnlyB
+}
+
+/// <summary>Что показывает боковая панель.</summary>
+internal enum SideMode
+{
+    None,
+    Info,
+    Cache
+}
+
 /// <summary>
-/// Окно одиночного плеера: кадр, боковая панель сведений, шкала позиции и транспорт.
-/// Вся работа с видео идёт через <see cref="IPlaybackBackend"/> — окно не знает,
-/// декодируется кадр напрямую или будет взят из кэша (фаза 4).
+/// Окно сравнения: два кадра, боковая панель сведений и кэша, таймлайн с двумя
+/// дорожками и общий транспорт. Всё воспроизведение идёт через <see cref="SyncEngine"/>:
+/// окно не командует плеерами напрямую, иначе треки разъезжались бы.
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -21,17 +44,18 @@ public partial class MainWindow : Window
     private static readonly string[] VideoExtensions =
         [".mp4", ".mkv", ".mov", ".avi", ".ts", ".m4v", ".webm", ".wmv", ".mpg", ".mpeg"];
 
-    /// <summary>
-    /// Прямой декод: он же владеет Player'ом, привязанным к FlyleafHost.
-    /// Живёт всё время работы окна, даже когда кадры идут из кэша.
-    /// </summary>
-    private readonly FlyleafBackend _flyleaf = new();
+    private readonly PlayerTrack _a = new(TrackId.A);
+    private readonly PlayerTrack _b = new(TrackId.B);
+    private readonly SyncEngine _sync;
 
-    /// <summary>
-    /// Действующий движок: либо прямой декод, либо <see cref="FrameCacheBackend"/>
-    /// поверх него. Всё окно работает только через эту ссылку.
-    /// </summary>
-    private IPlaybackBackend _backend;
+    /// <summary>Активный трек: ему адресованы открытие файла, отрезок и назначение мастера.</summary>
+    private TrackId _active = TrackId.A;
+
+    private LayoutMode _layout = LayoutMode.Side;
+    private SideMode _side = SideMode.None;
+
+    /// <summary>Какой трек показывает боковая панель.</summary>
+    private TrackId _sideTrack = TrackId.A;
 
     /// <summary>Идёт перетаскивание playhead: на медленном источнике seek делаем, отпустив кнопку.</summary>
     private bool _scrubbing;
@@ -45,12 +69,24 @@ public partial class MainWindow : Window
     /// <summary>Выбранная скорость воспроизведения; движок при смене режима её подхватывает.</summary>
     private double _speed = 1;
 
+    /// <summary>Переключатели панели расставляет код — реагировать на это не нужно.</summary>
+    private bool _syncingSideUi;
+
+    /// <summary>Метка времени последнего обработанного нажатия: отсекает повтор из окон вывода.</summary>
+    private int _lastKeyStamp = -1;
+
     public MainWindow()
     {
         InitializeComponent();
 
-        _backend = _flyleaf;
-        Subscribe(_backend);
+        _sync = new SyncEngine(_a, _b);
+        _sync.PositionChanged += (_, _) => Dispatcher.BeginInvoke(UpdatePosition);
+        _sync.StateChanged += (_, _) => Dispatcher.BeginInvoke(UpdateState);
+
+        // Коррекцию дрейфа видно в строке состояния: расхождение двух декодеров —
+        // вещь, которую надо уметь проверить, а не принимать на веру.
+        _sync.Corrected += (_, ms) => Dispatcher.BeginInvoke(() =>
+            Status($"ведомый трек подтянут: расхождение {ms:+0;-0} мс"));
 
         Loaded += OnLoaded;
         Closed += OnClosed;
@@ -58,40 +94,49 @@ public partial class MainWindow : Window
         // FlyleafHost выводит кадр в собственные окна (поверхность и накладка),
         // и когда фокус уходит туда, события клавиатуры до главного окна не доходят.
         // Классовый обработчик ловит их в любом окне приложения — и ровно один раз.
+        // Сочетания с Alt приходят как Key.System, а настоящая клавиша лежит в SystemKey —
+        // без этого Alt+стрелки (сдвиг трека) до окна не доходили вовсе.
+        //
+        // Каждый FlyleafHost добавляет свои окна вывода, и с двумя треками одно и то же
+        // нажатие доходило до классового обработчика дважды: Tab переключал трек туда и
+        // обратно, а Ctrl+I открывал и тут же закрывал панель. Отсекаем повтор по метке
+        // времени события — у одного нажатия она одна.
         EventManager.RegisterClassHandler(typeof(Window), Keyboard.PreviewKeyDownEvent,
-            new KeyEventHandler((_, e) => e.Handled = HandleKey(e.Key)));
+            new KeyEventHandler((_, e) =>
+            {
+                if (e.Timestamp == _lastKeyStamp)
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                _lastKeyStamp = e.Timestamp;
+                e.Handled = HandleKey(e.Key == Key.System ? e.SystemKey : e.Key);
+            }));
 
         DragOver += OnDragOver;
-        Drop += OnDrop;
+        Drop += (s, e) => OnDrop(s, e, _active);
     }
 
-    /// <summary>Подписка окна на движок: при смене режима переезжает на новый.</summary>
-    private void Subscribe(IPlaybackBackend backend)
-    {
-        backend.PositionChanged += OnBackendPositionChanged;
-        backend.StateChanged += OnBackendStateChanged;
-    }
-
-    private void Unsubscribe(IPlaybackBackend backend)
-    {
-        backend.PositionChanged -= OnBackendPositionChanged;
-        backend.StateChanged -= OnBackendStateChanged;
-    }
-
-    private void OnBackendPositionChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(UpdatePosition);
-    private void OnBackendStateChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(UpdateState);
+    private PlayerTrack Active => _sync.Track(_active);
+    private PlayerTrack SideTrack => _sync.Track(_sideTrack);
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        VideoHost.Player = _flyleaf.Player;
+        VideoHostA.Player = _a.Flyleaf.Player;
+        VideoHostB.Player = _b.Flyleaf.Player;
+
         InitCacheUi();
         InitTimeline();
+        ApplyLayout();
 
         // Накладка — отдельное окно, перетаскивание из главного окна там не ловится.
-        OverlayRoot.DragOver += OnDragOver;
-        OverlayRoot.Drop += OnDrop;
+        OverlayA.DragOver += OnDragOver;
+        OverlayA.Drop += (s, args) => OnDrop(s, args, TrackId.A);
+        OverlayB.DragOver += OnDragOver;
+        OverlayB.Drop += (s, args) => OnDrop(s, args, TrackId.B);
 
-        Osd.Visibility = App.Settings.ShowOverlay ? Visibility.Visible : Visibility.Collapsed;
+        _showOsd = App.Settings.ShowOverlay;
 
         UpdateState();
         Status(string.IsNullOrEmpty(AppEnv.FFmpegDir)
@@ -99,88 +144,95 @@ public partial class MainWindow : Window
             : "файл не открыт");
 
         if (App.StartupFile is { } file)
-            OpenFile(file);
+            OpenFile(_a, file);
+
+        if (App.StartupFileB is { } second)
+            OpenFile(_b, second);
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
-        App.Settings.ShowOverlay = Osd.Visibility == Visibility.Visible;
+        App.Settings.ShowOverlay = _showOsd;
         App.Settings.LoopSegment = _loop;
         App.Settings.SnapToFrames = Timeline.SnapEnabled;
         App.Settings.Save();
 
-        CancelBuild();
-        if (!ReferenceEquals(_backend, _flyleaf)) _backend.Dispose();
-        _flyleaf.Dispose();
+        foreach (var track in _sync.Tracks) CancelBuild(track);
+
+        _sync.Dispose();
+        _a.Dispose();
+        _b.Dispose();
     }
 
     // ---------- команды ----------
 
-    private void Open_Click(object sender, RoutedEventArgs e) => OpenWithDialog();
-    private void Close_Click(object sender, RoutedEventArgs e) => CloseFile();
+    private void OpenA_Click(object sender, RoutedEventArgs e) => OpenWithDialog(_a);
+    private void OpenB_Click(object sender, RoutedEventArgs e) => OpenWithDialog(_b);
+    private void Close_Click(object sender, RoutedEventArgs e) => CloseFile(Active);
     private void PlayPause_Click(object sender, RoutedEventArgs e) => TogglePlayPause();
-    private void StepNext_Click(object sender, RoutedEventArgs e) => _backend.StepForward();
-    private void StepPrev_Click(object sender, RoutedEventArgs e) => _backend.StepBack();
-    private void ToStart_Click(object sender, RoutedEventArgs e) => SeekFrame(Timeline.InFrame);
-    private void Info_Click(object sender, RoutedEventArgs e) => ToggleInfoPanel();
+    private void StepNext_Click(object sender, RoutedEventArgs e) => _sync.StepForward();
+    private void StepPrev_Click(object sender, RoutedEventArgs e) => _sync.StepBack();
+    private void ToStart_Click(object sender, RoutedEventArgs e) => SeekFrame(_sync.SegmentInFrame);
+    private void Info_Click(object sender, RoutedEventArgs e) => ToggleSide(SideMode.Info);
+    private void Cache_Click(object sender, RoutedEventArgs e) => ToggleSide(SideMode.Cache);
+    private void SideClose_Click(object sender, RoutedEventArgs e) => ToggleSide(_side);
+    private void Layout_Click(object sender, RoutedEventArgs e) => CycleLayout();
+    private void Master_Click(object sender, RoutedEventArgs e) => MakeActiveMaster();
 
     /// <summary>
-    /// Воспроизведение всегда идёт внутри отрезка: запуск с кадра вне его начинается
-    /// с начала отрезка, иначе кнопка «play» на отрезанном хвосте не делала бы ничего.
+    /// Воспроизведение всегда идёт внутри отрезка мастера: запуск с кадра вне его
+    /// начинается с начала отрезка, иначе кнопка «play» на отрезанном хвосте не
+    /// делала бы ничего.
     /// </summary>
     private void TogglePlayPause()
     {
-        if (!_backend.IsPlaying && _backend.IsOpen && Timeline.IsOpen
-            && (_backend.FrameIndex < Timeline.InFrame || _backend.FrameIndex >= Timeline.OutFrame))
-            SeekFrame(Timeline.InFrame);
+        if (!_sync.IsOpen) return;
 
-        _backend.TogglePlayPause();
-    }
+        if (!_sync.IsPlaying
+            && (_sync.PositionFrame < _sync.SegmentInFrame || _sync.PositionFrame >= _sync.SegmentOutFrame))
+            SeekFrame(_sync.SegmentInFrame);
 
-    /// <summary>
-    /// Панель сведений — накладка поверх кадра, а не постоянная колонка: при открытии
-    /// она ничего не двигает, а свёрнутая отдаёт всю ширину изображению. Каждый запуск
-    /// начинается со свёрнутой панели.
-    /// </summary>
-    private void ToggleInfoPanel()
-    {
-        var open = InfoPanel.Visibility == Visibility.Visible;
-        if (!open && CachePanel.Visibility == Visibility.Visible) ToggleCachePanel();
-
-        InfoPanel.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        BtnInfo.Foreground = (Brush)FindResource(open ? "TextBrush" : "AccentBrush");
-        BtnInfo.BorderBrush = (Brush)FindResource(open ? "LineBrush" : "AccentDim");
-        Status(open ? "панель сведений свёрнута (I)" : "панель сведений открыта (I)");
+        _sync.TogglePlayPause(SeekTrackFrame);
     }
 
     private bool HandleKey(Key key)
     {
-        // Пока правят поле скорости, клавиши принадлежат ему: иначе пробел ставил бы
-        // плеер на паузу вместо ввода, а стрелки уводили бы кадр вместо курсора.
+        // Пока правят поле скорости или сдвига, клавиши принадлежат ему: иначе пробел
+        // ставил бы плеер на паузу вместо ввода, а стрелки уводили бы кадр вместо курсора.
         if (Keyboard.FocusedElement is TextBox) return false;
 
         var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var step = shift ? 10 : 1;
 
         switch (key)
         {
-            case Key.O when ctrl: OpenWithDialog(); return true;
+            case Key.O when ctrl && shift: OpenWithDialog(_b); return true;
+            case Key.O when ctrl: OpenWithDialog(_a); return true;
             case Key.Space: TogglePlayPause(); return true;
-            case Key.Right: _backend.StepForward(step); return true;
-            case Key.Left: _backend.StepBack(step); return true;
 
-            // Home/End работают по отрезку — он и есть рабочая область; края ролика под Shift.
-            case Key.Home: SeekFrame(shift ? 0 : Timeline.InFrame); return true;
-            case Key.End when _backend.Media is { } m:
-                SeekFrame(shift ? m.FrameCount - 1 : Timeline.OutFrame);
-                return true;
+            // Alt+стрелки правят сдвиг второго трека покадрово — мышью так не попасть.
+            case Key.Right when alt: NudgeOffset(step); return true;
+            case Key.Left when alt: NudgeOffset(-step); return true;
+            case Key.D0 or Key.NumPad0 when alt: ResetOffset(); return true;
+
+            case Key.Right: _sync.StepForward(step); return true;
+            case Key.Left: _sync.StepBack(step); return true;
+
+            // Home/End работают по отрезку — он и есть рабочая область; края шкалы под Shift.
+            case Key.Home: SeekFrame(shift ? 0 : _sync.SegmentInFrame); return true;
+            case Key.End: SeekFrame(shift ? _sync.LastFrame : _sync.SegmentOutFrame); return true;
+
+            case Key.Tab: SwitchActiveTrack(); return true;
+            case Key.V: CycleLayout(); return true;
+            case Key.M: MakeActiveMaster(); return true;
 
             case Key.T: ToggleOverlay(); return true;
 
             // I и O заняты отрезком: в покадровой работе он нужнее панели сведений,
             // которая переехала на Ctrl+I.
-            case Key.I when ctrl: ToggleInfoPanel(); return true;
+            case Key.I when ctrl: ToggleSide(SideMode.Info); return true;
             case Key.I when shift: ResetSegment(); return true;
             case Key.I: SetSegmentIn(); return true;
             case Key.O: SetSegmentOut(); return true;
@@ -190,69 +242,189 @@ public partial class MainWindow : Window
             case Key.OemPlus or Key.Add: ZoomTimeline(ZoomStep); return true;
             case Key.OemMinus or Key.Subtract: ZoomTimeline(1 / ZoomStep); return true;
 
-            case Key.C: ToggleCachePanel(); return true;
+            case Key.C: ToggleSide(SideMode.Cache); return true;
             default: return false;
         }
     }
 
-    private void ToggleOverlay()
+    // ---------- треки, layout, панель ----------
+
+    private void SwitchActiveTrack()
     {
-        var visible = Osd.Visibility == Visibility.Visible;
-        Osd.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
-        App.Settings.ShowOverlay = !visible;
-        Status(visible ? "таймкод поверх кадра выключен (T)" : "таймкод поверх кадра включён (T)");
+        SetActiveTrack(_active == TrackId.A ? TrackId.B : TrackId.A);
+        Status($"активный трек: {Active.Letter}" + (Active.IsOpen ? $" — {Active.Media!.FileName}" : " (пуст)"));
     }
 
-    private void OpenWithDialog()
+    private void SetActiveTrack(TrackId id)
+    {
+        if (_active == id) return;
+
+        _active = id;
+
+        // Панель следует за активным треком: обычно смотрят именно его.
+        _sideTrack = id;
+        UpdateState();
+    }
+
+    private void MakeActiveMaster()
+    {
+        if (!Active.IsOpen)
+        {
+            Status($"трек {Active.Letter} пуст — мастером его не сделать");
+            return;
+        }
+
+        if (_sync.MasterId == _active)
+        {
+            Status($"трек {Active.Letter} уже мастер: шаг меряется его кадрами");
+            return;
+        }
+
+        _sync.SetMaster(_active);
+        SeekFrame(_sync.PositionFrame);
+        UpdateState();
+        Status($"мастер — трек {Active.Letter}: шаг меряется его кадрами ({Active.Fps:0.###} fps)");
+    }
+
+    private void CycleLayout()
+    {
+        _layout = _layout switch
+        {
+            LayoutMode.Side => LayoutMode.OnlyA,
+            LayoutMode.OnlyA => LayoutMode.OnlyB,
+            _ => LayoutMode.Side
+        };
+
+        ApplyLayout();
+        Status(_layout switch
+        {
+            LayoutMode.OnlyA => "показан только трек A (V)",
+            LayoutMode.OnlyB => "показан только трек B (V)",
+            _ => "кадры рядом (V)"
+        });
+    }
+
+    private void ApplyLayout()
+    {
+        var showA = _layout != LayoutMode.OnlyB;
+        var showB = _layout != LayoutMode.OnlyA;
+
+        PaneA.Visibility = showA ? Visibility.Visible : Visibility.Collapsed;
+        PaneB.Visibility = showB ? Visibility.Visible : Visibility.Collapsed;
+
+        PaneAColumn.Width = showA ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        PaneBColumn.Width = showB ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+        BtnLayout.Content = _layout switch
+        {
+            LayoutMode.OnlyA => "Только A",
+            LayoutMode.OnlyB => "Только B",
+            _ => "Рядом"
+        };
+    }
+
+    /// <summary>Открыть или свернуть боковую панель; открытой всегда одна из двух.</summary>
+    private void ToggleSide(SideMode mode)
+    {
+        _side = _side == mode ? SideMode.None : mode;
+
+        SidePanel.Visibility = _side == SideMode.None ? Visibility.Collapsed : Visibility.Visible;
+        InfoSection.Visibility = _side == SideMode.Info ? Visibility.Visible : Visibility.Collapsed;
+        CacheSection.Visibility = _side == SideMode.Cache ? Visibility.Visible : Visibility.Collapsed;
+        SideTitle.Text = _side == SideMode.Cache ? "К Э Ш   К А Д Р О В" : "С В Е Д Е Н И Я";
+
+        Highlight(BtnInfo, _side == SideMode.Info);
+        Highlight(BtnCache, _side == SideMode.Cache);
+
+        UpdateState();
+        Status(_side switch
+        {
+            SideMode.Info => "панель сведений открыта (Ctrl+I)",
+            SideMode.Cache => "панель кэша открыта (C)",
+            _ => "панель свёрнута"
+        });
+    }
+
+    private void SideTab_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_syncingSideUi || sender is not RadioButton { Tag: string tag }) return;
+        if (!Enum.TryParse<TrackId>(tag, out var id) || id == _sideTrack) return;
+
+        _sideTrack = id;
+        UpdateState();
+    }
+
+    /// <summary>Таймкод и номер кадра поверх изображения (клавиша T).</summary>
+    private bool _showOsd = true;
+
+    private void ToggleOverlay()
+    {
+        _showOsd = !_showOsd;
+        App.Settings.ShowOverlay = _showOsd;
+        UpdatePosition();
+        Status(_showOsd ? "таймкод поверх кадра включён (T)" : "таймкод поверх кадра выключен (T)");
+    }
+
+    // ---------- открытие файлов ----------
+
+    private void OpenWithDialog(PlayerTrack track)
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Открыть видео",
+            Title = $"Открыть видео в трек {track.Letter}",
             Filter = $"Видео|{string.Join(";", VideoExtensions.Select(x => "*" + x))}|Все файлы|*.*",
             InitialDirectory = Directory.Exists(App.Settings.LastFolder) ? App.Settings.LastFolder : null
         };
 
         if (dlg.ShowDialog(this) == true)
-            OpenFile(dlg.FileName);
+            OpenFile(track, dlg.FileName);
     }
 
-    private void OpenFile(string path)
+    private void OpenFile(PlayerTrack track, string path)
     {
         // Открытие всегда начинается с прямого декода: решение о кэше принимается
         // после того, как файл открылся и стали известны кодек и число кадров.
-        CancelBuild();
-        ResetCacheState();
-        UseDirectBackend();
+        CancelBuild(track);
+        track.ResetCacheState();
+        UseDirectBackend(track);
 
-        var res = _backend.Open(path);
+        var res = track.Backend.Open(path);
         if (!res.Success)
         {
             Status($"не открылся {Path.GetFileName(path)}: {res.Error}");
             return;
         }
 
+        track.ResetSegment();
+        SetActiveTrack(track.Id);
+
         App.Settings.LastFolder = Path.GetDirectoryName(path);
         App.Settings.Save();
 
-        var m = _backend.Media!;
-        Status($"открыт {m.FileName} — {m.Codec} {m.Width}×{m.Height}, {m.Fps:F3} fps" +
+        var m = track.Media!;
+        Status($"{track.Letter}: открыт {m.FileName} — {m.Codec} {m.Width}×{m.Height}, {m.Fps:F3} fps" +
                (m.HardwareAcceleration ? ", аппаратный декод" : ", программный декод"));
 
+        UpdateState();
+        SeekFrame(_sync.PositionFrame);
+
         // Замер шага назад и сборка кэша — после того, как первый кадр уже на экране.
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => DecideCache(path));
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => DecideCache(track, path));
     }
 
-    private void CloseFile()
+    private void CloseFile(PlayerTrack track)
     {
-        if (!_backend.IsOpen) return;
-        var name = _backend.Media!.FileName;
+        if (!track.IsOpen) return;
+        var name = track.Media!.FileName;
 
-        CancelBuild();
-        _backend.Close();
-        UseDirectBackend();
-        ResetCacheState();
+        CancelBuild(track);
+        track.Backend.Close();
+        UseDirectBackend(track);
+        track.ResetCacheState();
+        track.Offset = TimeSpan.Zero;
 
-        Status($"закрыт {name}");
+        UpdateState();
+        Status($"{track.Letter}: закрыт {name}");
     }
 
     // ---------- перетаскивание файла ----------
@@ -262,14 +434,12 @@ public partial class MainWindow : Window
         var path = DroppedVideo(e);
         e.Effects = path is null ? DragDropEffects.None : DragDropEffects.Copy;
         e.Handled = true;
-        HighlightDropZone(path);
     }
 
-    private void OnDrop(object sender, DragEventArgs e)
+    private void OnDrop(object sender, DragEventArgs e, TrackId id)
     {
         e.Handled = true;
         var path = DroppedVideo(e);
-        ResetDropZone();
 
         if (path is null)
         {
@@ -277,7 +447,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        OpenFile(path);
+        OpenFile(_sync.Track(id), path);
     }
 
     /// <summary>Путь к перетаскиваемому видео либо null, если это не поддерживаемый файл.</summary>
@@ -294,26 +464,6 @@ public partial class MainWindow : Window
             : null;
     }
 
-    private void HighlightDropZone(string? path)
-    {
-        if (_backend.IsOpen || path is null) return;
-
-        DropFrame.BorderBrush = (Brush)FindResource("AccentBrush");
-        DropFrame.Background = new SolidColorBrush(Color.FromArgb(0x10, 0xF2, 0xA1, 0x3C));
-        DropTitle.Text = "Отпустите, чтобы открыть";
-        DropTitle.Foreground = (Brush)FindResource("AccentBrush");
-        DropHint.Text = Path.GetFileName(path);
-    }
-
-    private void ResetDropZone()
-    {
-        DropFrame.BorderBrush = (Brush)FindResource("LineBrush");
-        DropFrame.Background = Brushes.Transparent;
-        DropTitle.Text = "Перетащите видео сюда";
-        DropTitle.Foreground = (Brush)FindResource("TextBrush");
-        DropHint.Text = "или нажмите «Открыть файл» · mp4, mkv, mov, avi, ts";
-    }
-
     // ---------- таймлайн ----------
 
     /// <summary>Шаг зума за щелчок колеса и за нажатие «+»/«−».</summary>
@@ -324,38 +474,217 @@ public partial class MainWindow : Window
         _loop = App.Settings.LoopSegment;
         Timeline.SnapEnabled = App.Settings.SnapToFrames;
 
-        Timeline.ThumbnailProvider = ThumbnailAt;
         Timeline.ScrubStarted += (_, _) => _scrubbing = true;
         Timeline.ScrubMoved += (_, frame) => TimelineScrub(frame);
         Timeline.ScrubEnded += (_, frame) => TimelineScrubEnd(frame);
-        Timeline.SegmentChanged += (_, _) => UpdateSegmentText();
+        Timeline.TrimDragged += (_, change) => TimelineTrim(change);
+        Timeline.OffsetDragged += (_, drag) => TimelineOffset(drag);
+        Timeline.TrackActivated += (_, index) => SetActiveTrack(index == 0 ? TrackId.A : TrackId.B);
+        Timeline.SegmentResetRequested += (_, index) => ResetSegment(index == 0 ? _a : _b);
 
-        UpdateTimelineButtons();
         ShowSpeed();
+        ShowOffset();
+    }
+
+    /// <summary>Собрать для контрола текущее состояние дорожек в кадрах мастер-клока.</summary>
+    private void RefreshTimeline()
+    {
+        var views = new List<TimelineTrackView>();
+
+        foreach (var track in _sync.Tracks)
+        {
+            var start = _sync.TimelineFrameAt(track.Offset);
+            var end = track.IsOpen ? _sync.ToTimeline(track, track.FrameCount) : start;
+
+            views.Add(new TimelineTrackView
+            {
+                Letter = track.Letter,
+                IsMaster = _sync.Master is { } master && ReferenceEquals(master, track),
+                IsActive = track.Id == _active,
+                IsOpen = track.IsOpen,
+                StartFrame = start,
+                EndFrame = end,
+                InFrame = _sync.ToTimeline(track, track.InFrame),
+                OutFrame = _sync.ToTimeline(track, track.OutFrame),
+                BuiltFraction = track.BuiltFraction,
+                HasThumbnails = track.HasThumbnails,
+                Aspect = track.Media is { Height: > 0 } m ? m.Width / (double)m.Height : 16 / 9.0,
+                ThumbnailProvider = time => ThumbnailAt(track, time)
+            });
+        }
+
+        Timeline.SetTracks(views, _sync.TimelineFrames, _sync.MasterFps);
+        Timeline.SetPosition(_sync.PositionFrame);
     }
 
     /// <summary>
     /// Playhead ведут мышью. Кадр показываем сразу, но только если источник быстрый
     /// (кэш или all-intra): на long-GOP исходнике seek занимает около секунды, и декод
-    /// на каждое движение мыши сделал бы перетаскивание неуправляемым — там кадр
-    /// декодируется по отпусканию кнопки (поведение фазы 1).
+    /// на каждое движение мыши сделал бы перетаскивание неуправляемым.
     /// </summary>
     private void TimelineScrub(long frame)
     {
-        if (!_backend.IsOpen) return;
+        if (!_sync.IsOpen) return;
 
         Timeline.SetPosition(frame);
-        ShowFrameLabels(frame);
+        _sync.SetPosition(frame);
+        ShowFrameLabels();
+
         if (LiveScrub) ScrubToFrame(frame);
     }
 
     private void TimelineScrubEnd(long frame)
     {
         _scrubbing = false;
-        if (!_backend.IsOpen) return;
+        if (!_sync.IsOpen) return;
 
         Timeline.SetPosition(frame);
         SeekFrame(frame);
+    }
+
+    /// <summary>Границу отрезка тащат мышью: контрол работает в кадрах шкалы, трек — в своих.</summary>
+    private void TimelineTrim(TrimChange change)
+    {
+        var track = change.Track == 0 ? _a : _b;
+        if (!track.IsOpen) return;
+
+        var local = Math.Clamp(_sync.LocalFrame(track, change.Frame), 0, track.LastFrame);
+
+        if (change.IsIn) track.SetIn(local);
+        else track.SetOut(local);
+
+        RefreshTimeline();
+        UpdateSegmentText();
+    }
+
+    /// <summary>
+    /// Клип тащат по дорожке — это выравнивание (PLAN.md §4.3). Кадры не пересчитываем
+    /// на каждое движение мыши: при отпускании оба трека встанут на свои места разом.
+    /// </summary>
+    private void TimelineOffset(OffsetDrag drag)
+    {
+        var track = drag.Track == 0 ? _a : _b;
+
+        if (drag.Finished)
+        {
+            SeekFrame(_sync.PositionFrame);
+            ShowOffset();
+            Status(OffsetMessage());
+            return;
+        }
+
+        if (!track.IsOpen || !_b.IsOpen || !_a.IsOpen) return;
+
+        ShiftTrack(track, drag.Frames);
+        Status(OffsetMessage());
+    }
+
+    /// <summary>
+    /// Сдвинуть трек и удержать под playhead тот же материал: нормализация пары
+    /// может увести начало шкалы, и мастер-время вместе с ним.
+    /// </summary>
+    private void ShiftTrack(PlayerTrack track, long frames)
+    {
+        var shift = _sync.ShiftTrack(track, frames);
+        if (shift != 0) _sync.SetPosition(_sync.PositionFrame + shift);
+
+        RefreshTimeline();
+        ShowOffset();
+        UpdateSegmentText();
+    }
+
+    private string OffsetMessage()
+    {
+        var frames = _sync.RelativeOffsetFrames(_b);
+        if (frames == 0) return "треки совмещены: сдвиг 0";
+
+        var time = _sync.FrameTime(Math.Abs(frames));
+        var sign = frames > 0 ? "+" : "−";
+        var who = frames > 0 ? "B отстаёт от A" : "B опережает A";
+        return $"сдвиг B: {sign}{Math.Abs(frames)} кадров ({time:mm\\:ss\\.fff}) — {who}";
+    }
+
+    // ---------- сдвиг: поле и клавиши ----------
+
+    private void OffsetDown_Click(object sender, RoutedEventArgs e) => NudgeOffset(-1);
+    private void OffsetUp_Click(object sender, RoutedEventArgs e) => NudgeOffset(1);
+    private void OffsetReset_Click(object sender, RoutedEventArgs e) => ResetOffset();
+
+    /// <summary>Подвинуть трек B относительно A на кадры мастера.</summary>
+    private void NudgeOffset(long frames)
+    {
+        if (!BothOpen())
+        {
+            Status("сдвиг нужен, когда открыты оба трека");
+            return;
+        }
+
+        ShiftTrack(_b, frames);
+        SeekFrame(_sync.PositionFrame);
+        Status(OffsetMessage());
+    }
+
+    private void SetOffset(long frames)
+    {
+        if (!BothOpen()) return;
+        NudgeOffset(frames - _sync.RelativeOffsetFrames(_b));
+    }
+
+    private void ResetOffset()
+    {
+        if (!_sync.IsOpen) return;
+
+        var shift = _sync.ResetOffsets();
+        if (shift != 0) _sync.SetPosition(_sync.PositionFrame + shift);
+
+        RefreshTimeline();
+        ShowOffset();
+        SeekFrame(_sync.PositionFrame);
+        Status("сдвиг сброшен: треки начинаются вместе");
+    }
+
+    private bool BothOpen() => _a.IsOpen && _b.IsOpen;
+
+    private void Offset_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            ApplyTypedOffset();
+            Keyboard.ClearFocus();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key != Key.Escape) return;
+
+        ShowOffset();
+        Keyboard.ClearFocus();
+        e.Handled = true;
+    }
+
+    private void Offset_LostFocus(object sender, RoutedEventArgs e) => ApplyTypedOffset();
+
+    private void ApplyTypedOffset()
+    {
+        var text = TxtOffset.Text.Trim().Replace('−', '-').Replace('+', ' ').Trim();
+
+        if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var frames))
+        {
+            SetOffset(frames);
+            return;
+        }
+
+        Status($"непонятный сдвиг «{TxtOffset.Text}» — оставил прежний");
+        ShowOffset();
+    }
+
+    private void ShowOffset()
+    {
+        var frames = BothOpen() ? _sync.RelativeOffsetFrames(_b) : 0;
+        TxtOffset.Text = frames > 0 ? $"+{frames}" : frames.ToString(CultureInfo.InvariantCulture);
+
+        var enabled = BothOpen();
+        TxtOffset.IsEnabled = BtnOffsetDown.IsEnabled = BtnOffsetUp.IsEnabled = BtnOffsetReset.IsEnabled = enabled;
     }
 
     // ---------- скорость воспроизведения ----------
@@ -418,7 +747,7 @@ public partial class MainWindow : Window
 
         _speed = clamped;
         ShowSpeed();
-        ApplySpeed();
+        _sync.Speed = _speed;
 
         if (changed) Status($"скорость воспроизведения: {SpeedName(clamped)}");
     }
@@ -430,14 +759,10 @@ public partial class MainWindow : Window
         BtnSpeedUp.IsEnabled = _speed < MaxSpeed;
     }
 
-    private void ApplySpeed()
-    {
-        if (!_backend.IsOpen || Math.Abs(_backend.Speed - _speed) < 0.001) return;
-        _backend.Speed = _speed;
-    }
-
     private static string SpeedName(double speed) =>
         speed.ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")) + "×";
+
+    // ---------- зум, снэп, отрезок ----------
 
     private void ZoomIn_Click(object sender, RoutedEventArgs e) => ZoomTimeline(ZoomStep);
     private void ZoomOut_Click(object sender, RoutedEventArgs e) => ZoomTimeline(1 / ZoomStep);
@@ -458,7 +783,7 @@ public partial class MainWindow : Window
     {
         Timeline.FitAll();
         UpdateZoomText();
-        Status("весь ролик в ширину окна (F)");
+        Status("вся шкала в ширину окна (F)");
     }
 
     private void ToggleSnap()
@@ -477,47 +802,59 @@ public partial class MainWindow : Window
         Status(_loop ? "петля по отрезку включена (L)" : "петля по отрезку выключена (L)");
     }
 
+    /// <summary>Границы отрезка ставит активный трек — в его собственных кадрах.</summary>
     private void SetSegmentIn()
     {
-        if (!Timeline.IsOpen) return;
-        Timeline.SetIn(_backend.FrameIndex);
-        Status($"начало отрезка: кадр {Timeline.InFrame}");
+        if (!Active.IsOpen) return;
+
+        Active.SetIn(Math.Clamp(_sync.LocalFrame(Active, _sync.PositionFrame), 0, Active.LastFrame));
+        RefreshTimeline();
+        UpdateSegmentText();
+        Status($"{Active.Letter}: начало отрезка — кадр {Active.InFrame}");
     }
 
     private void SetSegmentOut()
     {
-        if (!Timeline.IsOpen) return;
-        Timeline.SetOut(_backend.FrameIndex);
-        Status($"конец отрезка: кадр {Timeline.OutFrame}");
+        if (!Active.IsOpen) return;
+
+        Active.SetOut(Math.Clamp(_sync.LocalFrame(Active, _sync.PositionFrame), 0, Active.LastFrame));
+        RefreshTimeline();
+        UpdateSegmentText();
+        Status($"{Active.Letter}: конец отрезка — кадр {Active.OutFrame}");
     }
 
-    private void ResetSegment()
+    private void ResetSegment() => ResetSegment(Active);
+
+    private void ResetSegment(PlayerTrack track)
     {
-        if (!Timeline.IsOpen) return;
-        Timeline.ResetSegment();
-        Status("отрезок сброшен на весь ролик");
+        if (!track.IsOpen) return;
+
+        track.ResetSegment();
+        RefreshTimeline();
+        UpdateSegmentText();
+        Status($"{track.Letter}: отрезок сброшен на весь ролик");
     }
 
     /// <summary>
     /// Конец отрезка при воспроизведении: с петлёй возвращаемся в начало, без неё
-    /// останавливаемся ровно на последнем кадре отрезка. Шаг и seek границами не
-    /// ограничены — отрезок ограничивает воспроизведение, а не просмотр.
+    /// останавливаемся ровно на последнем кадре отрезка. Отрезок задаёт мастер —
+    /// ведомый следует за ним, как и на всём остальном транспорте.
     /// </summary>
     private void EnforceSegment()
     {
-        if (!_backend.IsPlaying || !Timeline.IsOpen || _scrubbing) return;
-        if (_backend.FrameIndex < Timeline.OutFrame) return;
+        if (!_sync.IsPlaying || !_sync.IsOpen || _scrubbing) return;
+        if (_sync.PositionFrame < _sync.SegmentOutFrame) return;
 
         if (_loop)
         {
-            SeekFrame(Timeline.InFrame);
-            _backend.Play();
+            SeekFrame(_sync.SegmentInFrame);
+            _sync.Play(SeekTrackFrame);
             return;
         }
 
-        _backend.Pause();
-        SeekFrame(Timeline.OutFrame);
-        Status($"конец отрезка (кадр {Timeline.OutFrame}) — петля выключена (L)");
+        _sync.Pause();
+        SeekFrame(_sync.SegmentOutFrame);
+        Status($"конец отрезка (кадр {_sync.SegmentOutFrame}) — петля выключена (L)");
     }
 
     private void UpdateTimelineButtons()
@@ -525,9 +862,11 @@ public partial class MainWindow : Window
         Highlight(BtnSnap, Timeline.SnapEnabled);
         Highlight(BtnLoop, _loop);
 
-        var open = _backend.IsOpen;
+        var open = _sync.IsOpen;
         BtnZoomIn.IsEnabled = BtnZoomOut.IsEnabled = BtnFit.IsEnabled = open;
-        BtnIn.IsEnabled = BtnOut.IsEnabled = BtnSegReset.IsEnabled = open;
+        BtnIn.IsEnabled = BtnOut.IsEnabled = BtnSegReset.IsEnabled = Active.IsOpen;
+        BtnMaster.IsEnabled = open;
+        BtnMaster.Content = _sync.Master is { } master ? $"Мастер: {master.Letter}" : "Мастер: —";
 
         UpdateZoomText();
         UpdateSegmentText();
@@ -541,48 +880,50 @@ public partial class MainWindow : Window
 
     private void UpdateZoomText()
     {
-        if (!Timeline.IsOpen)
+        if (!_sync.IsOpen)
         {
             TxtZoom.Text = "";
             return;
         }
 
         var ratio = Timeline.ZoomRatio;
-        TxtZoom.Text = ratio < 1.05 ? "весь ролик" : $"1 : {ratio:0.#}";
+        TxtZoom.Text = ratio < 1.05 ? "вся шкала" : $"1 : {ratio:0.#}";
     }
 
     private void UpdateSegmentText()
     {
-        if (!Timeline.IsOpen || _backend.Media is not { } media)
+        if (!Active.IsOpen)
         {
             TxtSegment.Text = "";
             return;
         }
 
-        if (Timeline.IsFullSegment)
+        if (Active.IsFullSegment)
         {
-            TxtSegment.Text = "отрезок: весь ролик";
+            TxtSegment.Text = $"{Active.Letter}: отрезок — весь ролик";
             return;
         }
 
-        var from = media.Fps > 0 ? TimeSpan.FromSeconds(Timeline.InFrame / media.Fps) : TimeSpan.Zero;
-        var to = media.Fps > 0 ? TimeSpan.FromSeconds(Timeline.OutFrame / media.Fps) : TimeSpan.Zero;
-        TxtSegment.Text = $"отрезок {ShortTimecode(from)} – {ShortTimecode(to)} · {Timeline.SegmentFrames} кадров";
+        var from = Active.TimeOf(Active.InFrame);
+        var to = Active.TimeOf(Active.OutFrame);
+        TxtSegment.Text =
+            $"{Active.Letter}: отрезок {ShortTimecode(from)} – {ShortTimecode(to)} · {Active.SegmentFrames} кадров";
     }
 
+    // ---------- переходы ----------
+
     /// <summary>
-    /// Можно ли листать кадры прямо во время перетаскивания. Критерий тот же,
-    /// что и у решения о кэше: замеренный шаг быстрее порога либо кадры идут
-    /// из all-intra источника (кэш, ProRes и подобные).
+    /// Можно ли листать кадры прямо во время перетаскивания. Критерий тот же, что и у
+    /// решения о кэше, но теперь по обоим трекам: если хоть один медленный, живое
+    /// листание сделает перетаскивание неуправляемым.
     /// </summary>
-    private bool LiveScrub
+    private bool LiveScrub => _sync.OpenTracks.All(IsFastSource);
+
+    private bool IsFastSource(PlayerTrack track)
     {
-        get
-        {
-            if (_backend.Media is not { } media) return false;
-            if (media.FromCache || StepSpeedProbe.IsAllIntra(media)) return true;
-            return _sourceStepMs > 0 && _sourceStepMs <= App.Settings.StepBackThresholdMs;
-        }
+        if (track.Media is not { } media) return true;
+        if (media.FromCache || StepSpeedProbe.IsAllIntra(media)) return true;
+        return track.SourceStepMs > 0 && track.SourceStepMs <= App.Settings.StepBackThresholdMs;
     }
 
     /// <summary>
@@ -599,44 +940,77 @@ public partial class MainWindow : Window
         finally { _seeking = false; }
     }
 
+    /// <summary>Единственный переход на кадр шкалы из интерфейса: движок разведёт его по трекам.</summary>
+    private void SeekFrame(long frame) => _sync.SeekToFrame(frame, SeekTrackFrame);
+
     /// <summary>
-    /// Единственный переход на кадр из интерфейса. Кроме собственно seek следит
-    /// за границей собираемого кэша: за ней кадров ещё нет, и играть приходится
-    /// с исходника, пока сборка туда не дойдёт.
+    /// Переход одного трека на его кадр. Кроме собственно seek следит за границей
+    /// собираемого кэша: за ней кадров ещё нет, и играть приходится с исходника,
+    /// пока сборка туда не дойдёт (фаза 4).
     /// </summary>
-    private void SeekFrame(long frame)
+    private void SeekTrackFrame(PlayerTrack track, long frame)
     {
-        if (_backend is FrameCacheBackend { Entry.Partial: true } cache && frame >= cache.AvailableFrames)
+        if (track.Backend is FrameCacheBackend { Entry.Partial: true } cache && frame >= cache.AvailableFrames)
         {
             // Может статься, что кадр уже дописан — перечитываем файл, и только
             // если его действительно ещё нет, возвращаемся на исходник.
-            if (frame >= ExtendPartialCache(cache))
-                PlayFromSource($"кадр {frame} ещё не в кэше — играю с исходника");
+            if (frame >= ExtendPartialCache(track, cache))
+                PlayFromSource(track, $"{track.Letter}: кадр {frame} ещё не в кэше — играю с исходника");
         }
 
-        _backend.SeekToFrame(frame);
+        track.Backend.SeekToFrame(frame);
     }
 
     // ---------- обновление интерфейса ----------
 
     private void UpdateState()
     {
-        var open = _backend.IsOpen;
-        var m = _backend.Media;
+        var open = _sync.IsOpen;
 
-        EmptyState.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        BtnClose.IsEnabled = open;
+        BtnClose.IsEnabled = Active.IsOpen;
         BtnPrev.IsEnabled = BtnNext.IsEnabled = BtnPlay.IsEnabled = BtnStart.IsEnabled = open;
-        FrameBadge.Visibility = open ? Visibility.Visible : Visibility.Hidden;
-        BtnPlay.Content = _backend.IsPlaying ? "❚❚" : "▶";
+        BtnPlay.Content = _sync.IsPlaying ? "❚❚" : "▶";
 
-        Title = open ? $"ComparisonVideoPlayer — {m!.FileName}" : "ComparisonVideoPlayer";
+        EmptyA.Visibility = _a.IsOpen ? Visibility.Collapsed : Visibility.Visible;
+        EmptyB.Visibility = _b.IsOpen ? Visibility.Collapsed : Visibility.Visible;
 
-        // Смена материала (в том числе переход на прокси другой частоты) сбрасывает
-        // зум и отрезок; тот же ролик контрол узнаёт и ничего не трогает.
-        Timeline.SetMedia(m);
+        PaneA.BorderThickness = new Thickness(_active == TrackId.A ? 2 : 0, 0, 0, 0);
+        PaneA.BorderBrush = (Brush)FindResource("AccentBrush");
+        PaneB.BorderThickness = new Thickness(_active == TrackId.B ? 2 : 1, 0, 0, 0);
+        PaneB.BorderBrush = (Brush)FindResource(_active == TrackId.B ? "TrackBBrush" : "LineBrush");
+
+        PaneNameA.Text = _a.IsOpen ? _a.Media!.FileName : "";
+        PaneNameB.Text = _b.IsOpen ? _b.Media!.FileName : "";
+
+        FrameBadgeA.Visibility = _a.IsOpen ? Visibility.Visible : Visibility.Collapsed;
+        FrameBadgeB.Visibility = _b.IsOpen ? Visibility.Visible : Visibility.Collapsed;
+        ModeBadgeB.Visibility = _b.IsOpen ? Visibility.Visible : Visibility.Collapsed;
+
+        Title = _sync.OpenTracks.Any()
+            ? "ComparisonVideoPlayer — " + string.Join(" · ", _sync.OpenTracks.Select(t => $"{t.Letter}: {t.Media!.FileName}"))
+            : "ComparisonVideoPlayer";
+
+        _syncingSideUi = true;
+        TabA.IsChecked = _sideTrack == TrackId.A;
+        TabB.IsChecked = _sideTrack == TrackId.B;
+        _syncingSideUi = false;
+
+        RefreshTimeline();
         UpdateTimelineButtons();
-        ApplySpeed();
+        ShowOffset();
+        _sync.ApplySpeed();
+
+        UpdateInfoPanel();
+        UpdateModeBadges();
+        UpdateCachePanel();
+        UpdatePosition();
+    }
+
+    private void UpdateInfoPanel()
+    {
+        var track = SideTrack;
+        var open = track.IsOpen;
+        var m = track.Media;
 
         InfoFile.Text = open ? m!.FileName : "—";
         InfoFile.ToolTip = open ? m!.FilePath : null;
@@ -648,59 +1022,92 @@ public partial class MainWindow : Window
 
         InfoSource.Text = !open ? "—" : m!.FromCache ? "кэша" : "исходника";
         InfoSource.Foreground = (Brush)FindResource(open && m!.FromCache ? "OkBrush" : "TextBrush");
-        UpdateProxyNote();
+
+        var master = _sync.Master is { } mt && ReferenceEquals(mt, track);
+        var offset = BothOpen() ? _sync.RelativeOffsetFrames(track) : 0;
+        InfoRole.Text = !open ? "—"
+            : master ? "мастер"
+            : offset == 0 ? "ведомый"
+            : $"ведомый, сдвиг {(offset > 0 ? "+" : "")}{offset}";
+
+        UpdateProxyNote(track);
 
         InfoRate.Text = open ? (m!.IsVariableFrameRate ? "VFR" : "CFR") : "—";
-        InfoRate.Foreground = open && m!.IsVariableFrameRate
-            ? (Brush)FindResource("WarnBrush")
-            : (Brush)FindResource("OkBrush");
-        if (!open) InfoRate.Foreground = (Brush)FindResource("TextBrush");
+        InfoRate.Foreground = !open
+            ? (Brush)FindResource("TextBrush")
+            : (Brush)FindResource(m!.IsVariableFrameRate ? "WarnBrush" : "OkBrush");
         InfoVfrNote.Visibility = open && m!.IsVariableFrameRate ? Visibility.Visible : Visibility.Collapsed;
-
-        UpdatePosition();
     }
 
     private void UpdatePosition()
     {
-        var m = _backend.Media;
-        var pos = _backend.Position;
+        TxtTime.Text = Timecode(_sync.PositionTime);
+        TxtDuration.Text = _sync.IsOpen ? "/ " + Timecode(_sync.Duration) : "/ --:--:--.---";
 
-        TxtTime.Text = Timecode(pos);
-        TxtDuration.Text = m is null ? "/ --:--:--.---" : "/ " + Timecode(m.Duration);
+        ShowFrameLabels();
 
-        if (m is null)
-        {
-            TxtFrame.Text = "";
-            OsdTime.Text = "--:--:--.---";
-            OsdFrame.Text = "";
-            return;
-        }
-
-        ShowFrameLabels(_backend.FrameIndex);
-
-        if (!_scrubbing) Timeline.SetPosition(_backend.FrameIndex);
+        if (!_scrubbing) Timeline.SetPosition(_sync.PositionFrame);
 
         EnforceSegment();
     }
 
-    /// <summary>Подписи таймкода и номера кадра — и в транспорте, и поверх изображения.</summary>
-    private void ShowFrameLabels(long frame)
+    /// <summary>
+    /// Подписи таймкода и номера кадра — и в транспорте, и поверх изображения.
+    /// У каждого трека свой номер кадра: при сдвиге и разных fps это разные числа.
+    /// </summary>
+    private void ShowFrameLabels()
     {
-        var m = _backend.Media;
-        if (m is null) return;
+        ShowTrackLabels(_a, TxtFrameA, FrameBadgeA, PaneOsdA, PaneMasterA, NoFrameA, NoFrameHintA);
+        ShowTrackLabels(_b, TxtFrameB, FrameBadgeB, PaneOsdB, PaneMasterB, NoFrameB, NoFrameHintB);
+    }
 
-        var time = _scrubbing && m.Fps > 0 ? TimeSpan.FromSeconds(frame / m.Fps) : _backend.Position;
-        var approx = m.IsVariableFrameRate ? "≈" : "";
+    private void ShowTrackLabels(PlayerTrack track, TextBlock badgeText, UIElement badge,
+        TextBlock osd, TextBlock role, UIElement noFrame, TextBlock noFrameHint)
+    {
+        if (!track.IsOpen)
+        {
+            badgeText.Text = "";
+            osd.Text = "";
+            role.Text = "";
+            noFrame.Visibility = Visibility.Collapsed;
+            return;
+        }
 
-        TxtTime.Text = Timecode(time);
-        TxtFrame.Text = $"кадр {approx}{frame} / {Math.Max(m.FrameCount - 1, 0)}";
-        OsdTime.Text = Timecode(time);
-        OsdFrame.Text = $"кадр {approx}{frame}";
+        var frame = _sync.DisplayFrame(track);
+        var approx = track.Media!.IsVariableFrameRate ? "≈" : "";
+
+        badgeText.Text = frame is { } f
+            ? $"{track.Letter} {approx}{f} / {Math.Max(track.FrameCount - 1, 0)}"
+            : $"{track.Letter} —";
+        badge.Opacity = frame is null ? 0.45 : 1;
+
+        osd.Text = _showOsd && frame is { } shown
+            ? $"кадр {approx}{shown} · {Timecode(track.TimeOf(shown))}"
+            : "";
+
+        var isMaster = _sync.Master is { } master && ReferenceEquals(master, track);
+        var offset = BothOpen() ? _sync.RelativeOffsetFrames(track) : 0;
+        role.Text = isMaster
+            ? $"мастер · {track.Fps:0.###} fps"
+            : $"{(offset > 0 ? "+" : "")}{offset} кадров · {track.Fps:0.###} fps";
+
+        // Вне материала (или вне отрезка) кадра нет: показываем это прямо,
+        // а не замораживаем крайний кадр — в покадровом сравнении это обман.
+        noFrame.Visibility = frame is null ? Visibility.Visible : Visibility.Collapsed;
+
+        if (frame is null)
+        {
+            var local = _sync.LocalFrame(track, _sync.PositionFrame);
+            noFrameHint.Text = local < track.InFrame
+                ? $"материал {track.Letter} начинается позже"
+                : $"материал {track.Letter} здесь уже кончился";
+        }
     }
 
     private void Status(string message) => TxtStatus.Text = message;
 
     private static string Timecode(TimeSpan t) => t.ToString(@"hh\:mm\:ss\.fff");
+
     private static string ShortTimecode(TimeSpan t) =>
         t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"mm\:ss");
 }

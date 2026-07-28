@@ -3,20 +3,21 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Shape = System.Windows.Shapes.Shape;
 using System.Windows.Threading;
 using ComparisonPlayer.Cache;
 using ComparisonPlayer.Playback;
+using ComparisonPlayer.Tracks;
 
 namespace ComparisonPlayer;
 
 /// <summary>
-/// Фаза 4: дисковый кэш кадров. Окно решает, откуда брать кадры (прямой декод или
-/// all-intra прокси), показывает прогресс фоновой сборки и полоску миниатюр.
-/// Логика вынесена в отдельный файл частичного класса, чтобы MainWindow остался
-/// про интерфейс плеера, а не про кэш.
+/// Фаза 4: дисковый кэш кадров, теперь на каждый трек свой. Окно решает, откуда брать
+/// кадры (прямой декод или all-intra прокси), показывает ход фоновой сборки и отдаёт
+/// таймлайну миниатюры. Состояние кэша живёт в <see cref="PlayerTrack"/> — здесь только
+/// решения и интерфейс.
 /// </summary>
 public partial class MainWindow
 {
@@ -24,37 +25,17 @@ public partial class MainWindow
     private ProxyCacheBuilder? _builder;
     private ProxyCacheBuilder Builder => _builder ??= new ProxyCacheBuilder(_cacheStore);
 
-    /// <summary>Идущая сборка; null — сборки нет.</summary>
-    private CancellationTokenSource? _buildCts;
-
     /// <summary>Подпись для ключа запомненных замеров: от параметров прокси не зависит.</summary>
     private const string ProbeParameters = "step-probe-v1";
 
-    /// <summary>Ключ кэша открытого файла.</summary>
-    private string? _cacheKey;
+    /// <summary>
+    /// Трек, кэш которого собирается прямо сейчас. Сборки идут по очереди: два ffmpeg'а
+    /// на 4K делили бы диск и процессор и только мешали бы друг другу.
+    /// </summary>
+    private PlayerTrack? _building;
 
-    /// <summary>Ключ замера шага назад открытого файла.</summary>
-    private string? _probeKey;
-
-    /// <summary>Готовая запись кэша открытого файла, если она есть.</summary>
-    private CacheEntry? _cacheEntry;
-
-    /// <summary>Замер шага назад на исходнике, мс; 0 — не мерили.</summary>
-    private double _sourceStepMs;
-
-    /// <summary>Замер шага назад на прокси, мс; 0 — не мерили.</summary>
-    private double _cacheStepMs;
-
-    private double _buildPercent;
-
-    /// <summary>Оценка оставшегося времени сборки для индикатора; пусто — оценки нет.</summary>
-    private string _buildEta = "";
-
-    /// <summary>Какая доля ролика уже в кэше: по ней рисуются и полоса готовности, и лента кадров.</summary>
-    private double _builtFraction;
-
-    /// <summary>Сколько кадров прокси уже записано ffmpeg'ом; 0 — сборки нет.</summary>
-    private long _builtFrames;
+    /// <summary>Трек, дожидающийся своей очереди на сборку.</summary>
+    private PlayerTrack? _queued;
 
     /// <summary>
     /// Минимальный задел, при котором есть смысл переходить на собираемый кэш:
@@ -68,18 +49,9 @@ public partial class MainWindow
     /// <summary>Переключатели режима расставляет код — реагировать на это не нужно.</summary>
     private bool _syncingCacheUi;
 
-    /// <summary>Все снятые миниатюры файла; таймлайн берёт из них ту, что нужна клетке клипа.</summary>
-    private IReadOnlyList<string> _thumbFiles = [];
-
-    /// <summary>Шаг между миниатюрами по времени, секунд; 0 — плана нет.</summary>
-    private double _thumbInterval;
-
-    /// <summary>Картинку декодируем один раз: клип перерисовывается на каждый зум и шаг.</summary>
-    private readonly Dictionary<string, ImageSource> _thumbCache = [];
-
     private long CacheLimitBytes => (long)(App.Settings.CacheLimitGb * 1024 * 1024 * 1024);
 
-    // ---------- инициализация и сброс ----------
+    // ---------- инициализация ----------
 
     private void InitCacheUi()
     {
@@ -103,65 +75,47 @@ public partial class MainWindow
 
         RbAutoHint.Text = $"строить, если шаг назад медленнее {App.Settings.StepBackThresholdMs} мс";
 
-        UpdateModeBadge();
-        UpdateCachePanel();
-    }
-
-    /// <summary>Забыть всё, что относилось к прошлому файлу.</summary>
-    private void ResetCacheState()
-    {
-        _cacheKey = null;
-        _probeKey = null;
-        _cacheEntry = null;
-        _sourceStepMs = 0;
-        _cacheStepMs = 0;
-        _buildPercent = 0;
-        _builtFrames = 0;
-        _builtFraction = 0;
-
-        ClearThumbnails();
-        ShowBuildBar(false);
-        UpdateModeBadge();
+        UpdateModeBadges();
         UpdateCachePanel();
     }
 
     // ---------- решение о кэше ----------
 
     /// <summary>
-    /// Что делать с только что открытым файлом: играть как есть, взять готовый кэш
-    /// или собрать новый. Вызывается после того, как первый кадр уже на экране.
+    /// Что делать с только что открытым файлом трека: играть как есть, взять готовый
+    /// кэш или собрать новый. Вызывается после того, как первый кадр уже на экране.
     /// </summary>
-    private void DecideCache(string path)
+    private void DecideCache(PlayerTrack track, string path)
     {
-        if (!_backend.IsOpen || _backend.Media is not { } media) return;
+        if (!track.IsOpen || track.Media is not { } media) return;
 
         if (App.Settings.CacheMode == FrameCacheMode.Never)
         {
-            UpdateModeBadge();
+            UpdateModeBadges();
             return;
         }
 
         try
         {
-            _cacheKey = CacheKey.For(path, ProxyCacheBuilder.Signature(App.Settings.CacheFps));
+            track.CacheKey = CacheKey.For(path, ProxyCacheBuilder.Signature(App.Settings.CacheFps));
 
             // Скорость шага назад — свойство исходника, а не прокси, поэтому её
             // ключ не зависит от параметров сборки: смена частоты прокси не
             // должна приводить к повторному замеру того же файла.
-            _probeKey = CacheKey.For(path, ProbeParameters);
+            track.ProbeKey = CacheKey.For(path, ProbeParameters);
         }
         catch (Exception ex)
         {
-            Status($"кэш недоступен: не прочитать файл ({ex.Message})");
+            Status($"{track.Letter}: кэш недоступен, не прочитать файл ({ex.Message})");
             return;
         }
 
-        _sourceStepMs = ProbeCache.Get(_probeKey) ?? 0;
+        track.SourceStepMs = ProbeCache.Get(track.ProbeKey) ?? 0;
 
-        if (_cacheStore.Find(_cacheKey) is { } ready)
+        if (_cacheStore.Find(track.CacheKey) is { } ready)
         {
             var built = ready.CreatedUtc.ToLocalTime().ToString("dd.MM HH:mm");
-            UseCacheBackend(ready, $"кэш от {built} переиспользован — сборка не нужна");
+            UseCacheBackend(track, ready, $"{track.Letter}: кэш от {built} переиспользован — сборка не нужна");
             return;
         }
 
@@ -169,25 +123,27 @@ public partial class MainWindow
         {
             if (StepSpeedProbe.IsAllIntra(media))
             {
-                Status($"{media.Codec}: каждый кадр ключевой, кэш не нужен");
-                UpdateModeBadge();
+                Status($"{track.Letter}: {media.Codec} — каждый кадр ключевой, кэш не нужен");
+                UpdateModeBadges();
                 return;
             }
 
-            if (_sourceStepMs <= 0) _sourceStepMs = MeasureSourceStep(media, _probeKey!);
-            UpdateModeBadge();
+            if (track.SourceStepMs <= 0) track.SourceStepMs = MeasureSourceStep(track, media);
+            UpdateModeBadges();
             UpdateCachePanel();
 
-            if (_sourceStepMs <= App.Settings.StepBackThresholdMs)
+            if (track.SourceStepMs <= App.Settings.StepBackThresholdMs)
             {
-                Status($"шаг назад {_sourceStepMs:F0} мс — кэш не нужен (порог {App.Settings.StepBackThresholdMs} мс)");
+                Status($"{track.Letter}: шаг назад {track.SourceStepMs:F0} мс — кэш не нужен " +
+                       $"(порог {App.Settings.StepBackThresholdMs} мс)");
                 return;
             }
 
-            Status($"шаг назад {_sourceStepMs:F0} мс — строю кэш кадров (порог {App.Settings.StepBackThresholdMs} мс)");
+            Status($"{track.Letter}: шаг назад {track.SourceStepMs:F0} мс — строю кэш кадров " +
+                   $"(порог {App.Settings.StepBackThresholdMs} мс)");
         }
 
-        StartBuild(media);
+        StartBuild(track, media);
     }
 
     /// <summary>
@@ -195,21 +151,21 @@ public partial class MainWindow
     /// показываем сообщение и даём окну перерисоваться, а результат запоминаем —
     /// повторно этот файл мерить не придётся.
     /// </summary>
-    private double MeasureSourceStep(MediaInfo media, string key)
+    private double MeasureSourceStep(PlayerTrack track, MediaInfo media)
     {
-        Status("замеряю скорость шага назад…");
+        Status($"{track.Letter}: замеряю скорость шага назад…");
         Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
 
-        var ms = StepSpeedProbe.Measure(_backend, media);
-        ProbeCache.Set(key, ms);
+        var ms = StepSpeedProbe.Measure(track.Backend, media);
+        if (track.ProbeKey is { } key) ProbeCache.Set(key, ms);
         return ms;
     }
 
     // ---------- сборка ----------
 
-    private void StartBuild(MediaInfo media)
+    private void StartBuild(PlayerTrack track, MediaInfo media)
     {
-        if (_buildCts is not null || _cacheKey is null) return;
+        if (track.BuildCts is not null || track.CacheKey is null) return;
 
         if (!File.Exists(AppEnv.FFmpegExe) && AppEnv.FFmpegExe != "ffmpeg")
         {
@@ -217,59 +173,69 @@ public partial class MainWindow
             return;
         }
 
-        var key = _cacheKey;
+        // Сборки идут по очереди: параллельные ffmpeg'и на двух 4K-роликах
+        // делят диск и процессор и оба работают медленнее, чем поодиночке.
+        if (_building is not null && !ReferenceEquals(_building, track))
+        {
+            _queued = track;
+            Status($"{track.Letter}: кэш соберётся после трека {_building.Letter}");
+            UpdateModeBadges();
+            return;
+        }
+
+        var key = track.CacheKey;
         var cts = new CancellationTokenSource();
-        _buildCts = cts;
-        _buildPercent = 0;
+        track.BuildCts = cts;
+        track.BuildPercent = 0;
+        _building = track;
 
         ShowBuildBar(true);
-        ShowThumbnails([]);   // полоска появляется сразу и заполняется по мере сборки
-        UpdateModeBadge();
+        ShowThumbnails(track, []);   // клип заполняется кадрами по мере сборки
+        UpdateModeBadges();
         UpdateCachePanel();
 
-        var progress = new Progress<BuildProgress>(OnBuildProgress);
+        var progress = new Progress<BuildProgress>(p => OnBuildProgress(track, p));
 
         Task.Run(() => Builder.BuildAsync(media, key, App.Settings.CacheFps, withThumbnails: true, progress, cts.Token), cts.Token)
-            .ContinueWith(task => OnBuildFinished(task, key, cts),
+            .ContinueWith(task => OnBuildFinished(track, task, key, cts),
                 CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
-    private void OnBuildProgress(BuildProgress progress)
+    private void OnBuildProgress(PlayerTrack track, BuildProgress progress)
     {
-        _buildPercent = progress.Percent;
+        track.BuildPercent = progress.Percent;
 
         // Ход сборки показывает нижняя кромка клипа на таймлайне — она же говорит,
         // докуда кэш уже готов. Проценты и оставшееся время идут в индикатор режима.
-        _builtFraction = Math.Clamp(progress.Percent / 100.0, 0, 1);
-        Timeline.BuiltFraction = _builtFraction;
+        track.BuiltFraction = Math.Clamp(progress.Percent / 100.0, 0, 1);
+        track.BuildEta = progress.Eta > TimeSpan.Zero ? Eta(progress.Eta) : "";
 
-        _buildEta = progress.Eta > TimeSpan.Zero ? Eta(progress.Eta) : "";
-
-        ModeBadge.ToolTip =
-            $"{progress.Frame} / {progress.Total} кадров" +
+        BuildBadge(track).ToolTip =
+            $"{track.Letter}: {progress.Frame} / {progress.Total} кадров" +
             (progress.Eta > TimeSpan.Zero ? $" · осталось ~{Eta(progress.Eta)}" : "") +
             (progress.Speed > 0 ? $" · {progress.Speed:F2}× реального времени" : "");
 
         // Миниатюры строятся параллельно с прокси и показываются по мере появления;
         // последний файл может быть ещё недописан, поэтому его пропускаем.
-        if (_cacheKey is { } key)
+        if (track.CacheKey is { } key)
         {
             var dir = Path.Combine(_cacheStore.DirectoryFor(key), "thumbs");
             if (Directory.Exists(dir))
             {
                 var files = Directory.GetFiles(dir, "*.jpg");
                 Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-                if (files.Length > 1) ShowThumbnails(files[..^1]);
+                if (files.Length > 1) ShowThumbnails(track, files[..^1]);
             }
         }
 
         if (progress.Stage == BuildStage.Proxy)
         {
-            _builtFrames = progress.Frame;
-            FollowPartialCache();
+            track.BuiltFrames = progress.Frame;
+            FollowPartialCache(track);
         }
 
-        UpdateModeBadge();
+        RefreshTimeline();
+        UpdateModeBadges();
     }
 
     /// <summary>
@@ -277,36 +243,38 @@ public partial class MainWindow
     /// часть прокси накрывает текущую позицию, играем из неё, а по мере роста файла
     /// перечитываем его. Пока задел не набран — остаёмся на исходнике.
     /// </summary>
-    private void FollowPartialCache()
+    private void FollowPartialCache(PlayerTrack track)
     {
-        if (_buildCts is null || _cacheKey is null || !_backend.IsOpen) return;
+        if (track.BuildCts is null || track.CacheKey is null || !track.IsOpen) return;
 
-        if (_backend is FrameCacheBackend cache)
+        var local = _sync.LocalFrame(track, _sync.PositionFrame);
+
+        if (track.Backend is FrameCacheBackend cache)
         {
             if (!cache.Entry.Partial) return;
 
             // Перечитывать растущий файл просто так нельзя: открытие сбрасывает
             // позицию, и на паузе playhead прилипал бы к краю собранного. Делаем
             // это только при воспроизведении, когда до края осталось немного, —
-            // на паузе кадр за краем запросит сам пользователь (см. SeekFrame).
-            if (!_backend.IsPlaying) return;
-            if (_backend.FrameIndex < cache.AvailableFrames - PartialRefreshStep) return;
-            if (_builtFrames <= cache.AvailableFrames) return;
+            // на паузе кадр за краем запросит сам пользователь (см. SeekTrackFrame).
+            if (!track.Backend.IsPlaying) return;
+            if (local < cache.AvailableFrames - PartialRefreshStep) return;
+            if (track.BuiltFrames <= cache.AvailableFrames) return;
 
             // Воспроизведение обгоняет сборку — дальше кадров нет, играем с исходника.
-            if (ExtendPartialCache(cache) <= _backend.FrameIndex + PartialRefreshStep / 2)
-                PlayFromSource("воспроизведение обогнало сборку кэша — играю с исходника");
+            if (ExtendPartialCache(track, cache) <= local + PartialRefreshStep / 2)
+                PlayFromSource(track, $"{track.Letter}: воспроизведение обогнало сборку — играю с исходника");
 
             return;
         }
 
-        if (_builtFrames < PartialHeadStart) return;
-        if (_backend.FrameIndex >= _builtFrames - PartialHeadStart / 2) return;
+        if (track.BuiltFrames < PartialHeadStart) return;
+        if (local >= track.BuiltFrames - PartialHeadStart / 2) return;
 
-        var entry = PartialEntry();
+        var entry = PartialEntry(track);
         if (entry is null || !File.Exists(entry.ProxyPath)) return;
 
-        UseCacheBackend(entry, $"играю из собираемого кэша — готово {_buildPercent:F0} %");
+        UseCacheBackend(track, entry, $"{track.Letter}: играю из собираемого кэша — готово {track.BuildPercent:F0} %");
     }
 
     /// <summary>
@@ -314,15 +282,15 @@ public partial class MainWindow
     /// после этого доступны все кадры, дописанные с момента открытия.
     /// </summary>
     /// <returns>Сколько кадров стало доступно.</returns>
-    private long ExtendPartialCache(FrameCacheBackend cache)
+    private long ExtendPartialCache(PlayerTrack track, FrameCacheBackend cache)
     {
-        var frame = _backend.FrameIndex;
-        var playing = _backend.IsPlaying;
+        var frame = track.Backend.FrameIndex;
+        var playing = track.Backend.IsPlaying;
 
         if (!cache.Reopen().Success) return cache.AvailableFrames;
 
-        _backend.SeekToFrame(frame);
-        if (playing) _backend.Play();
+        track.Backend.SeekToFrame(frame);
+        if (playing) track.Backend.Play();
 
         UpdateState();
         return cache.AvailableFrames;
@@ -332,9 +300,9 @@ public partial class MainWindow
     /// Описание ещё не готовой записи: файл прокси уже растёт, а entry.json появится
     /// только в конце сборки, поэтому на диск такая запись не сохраняется.
     /// </summary>
-    private CacheEntry? PartialEntry()
+    private CacheEntry? PartialEntry(PlayerTrack track)
     {
-        if (_cacheKey is not { } key || _flyleaf.Media is not { } media) return null;
+        if (track.CacheKey is not { } key || track.Flyleaf.Media is not { } media) return null;
 
         var fps = App.Settings.CacheFps > 0 ? App.Settings.CacheFps : media.Fps;
         var frames = fps > 0 && media.Duration > TimeSpan.Zero
@@ -358,13 +326,14 @@ public partial class MainWindow
         };
     }
 
-    private void OnBuildFinished(Task<CacheEntry> task, string key, CancellationTokenSource cts)
+    private void OnBuildFinished(PlayerTrack track, Task<CacheEntry> task, string key, CancellationTokenSource cts)
     {
         // Пока сборка шла, файл могли закрыть и открыть другой — тогда результат чужой.
-        var current = ReferenceEquals(cts, _buildCts);
+        var current = ReferenceEquals(cts, track.BuildCts);
         if (current)
         {
-            _buildCts = null;
+            track.BuildCts = null;
+            if (ReferenceEquals(_building, track)) _building = null;
             ShowBuildBar(false);
         }
         cts.Dispose();
@@ -373,10 +342,11 @@ public partial class MainWindow
         {
             if (current)
             {
-                DropPartialCache(key, "сборка кэша отменена — играю с исходника");
-                UpdateModeBadge();
+                DropPartialCache(track, key, $"{track.Letter}: сборка кэша отменена — играю с исходника");
+                UpdateModeBadges();
                 UpdateCachePanel();
             }
+            StartQueuedBuild();
             return;
         }
 
@@ -385,53 +355,76 @@ public partial class MainWindow
             var message = task.Exception?.InnerException?.Message ?? "неизвестная ошибка";
             if (current)
             {
-                DropPartialCache(key, $"кэш не собрался: {message}");
-                UpdateModeBadge();
+                DropPartialCache(track, key, $"{track.Letter}: кэш не собрался — {message}");
+                UpdateModeBadges();
                 UpdateCachePanel();
             }
+            StartQueuedBuild();
             return;
         }
 
-        if (!current || _cacheKey != key) return;
+        if (current && track.CacheKey == key)
+        {
+            var entry = task.Result;
+            var freed = _cacheStore.Trim(CacheLimitBytes, key);
+            var note = freed > 0 ? $", вытеснено записей: {freed}" : "";
 
-        var entry = task.Result;
-        var freed = _cacheStore.Trim(CacheLimitBytes, key);
-        var note = freed > 0 ? $", вытеснено записей: {freed}" : "";
+            UseCacheBackend(track, entry, $"{track.Letter}: кэш собран ({Size(entry.Bytes)}){note}");
+        }
 
-        UseCacheBackend(entry, $"кэш собран ({Size(entry.Bytes)}){note}");
+        StartQueuedBuild();
     }
 
-    private void CancelBuild() => _buildCts?.Cancel();
+    /// <summary>Запустить сборку следующего трека, дождавшегося очереди.</summary>
+    private void StartQueuedBuild()
+    {
+        if (_building is not null || _queued is not { } next) return;
+
+        _queued = null;
+        if (next.IsOpen && next.Media is { FromCache: false } media && next.BuildCts is null)
+            StartBuild(next, media);
+    }
+
+    private void CancelBuild(PlayerTrack track)
+    {
+        if (ReferenceEquals(_queued, track)) _queued = null;
+        track.BuildCts?.Cancel();
+    }
 
     /// <summary>
     /// Сборка не дошла до конца: играть из обрубка нельзя, и держать его на диске
     /// незачем — целиком он всё равно не переиспользуется (entry.json не записан).
     /// </summary>
-    private void DropPartialCache(string key, string message)
+    private void DropPartialCache(PlayerTrack track, string key, string message)
     {
-        _builtFrames = 0;
+        track.BuiltFrames = 0;
+        track.BuiltFraction = 0;
 
-        if (_backend is FrameCacheBackend { Entry.Partial: true }) PlayFromSource(message);
+        if (track.Backend is FrameCacheBackend { Entry.Partial: true }) PlayFromSource(track, message);
         else Status(message);
 
         _cacheStore.Remove(key);
+        RefreshTimeline();
     }
 
     // ---------- переключение движка ----------
 
-    /// <summary>Перевести плеер на кадры из кэша, сохранив позицию и состояние.</summary>
-    private void UseCacheBackend(CacheEntry entry, string message)
+    /// <summary>Перевести трек на кадры из кэша, сохранив позицию и состояние.</summary>
+    private void UseCacheBackend(PlayerTrack track, CacheEntry entry, string message)
     {
-        if (!_backend.IsOpen || _backend.Media is null) return;
+        if (!track.IsOpen || track.Media is null) return;
 
-        var frame = _backend.FrameIndex;
-        var wasPlaying = _backend.IsPlaying;
+        var frame = track.Backend.FrameIndex;
+        var wasPlaying = track.Backend.IsPlaying;
 
-        Unsubscribe(_backend);
-        _backend.Close();
-        if (!ReferenceEquals(_backend, _flyleaf)) _backend.Dispose();
+        // Прокси может идти на другой частоте, и если это мастер, то у мастер-кадра
+        // меняется длительность. Держимся за момент времени, а не за номер кадра.
+        var masterTime = _sync.PositionTime;
 
-        var cache = new FrameCacheBackend(_flyleaf, entry);
+        track.Backend.Close();
+        if (!ReferenceEquals(track.Backend, track.Flyleaf)) track.Backend.Dispose();
+
+        var cache = new FrameCacheBackend(track.Flyleaf, entry);
         var res = cache.Open(entry.SourcePath);
 
         if (!res.Success)
@@ -439,88 +432,101 @@ public partial class MainWindow
             // Кэш не открылся — возвращаемся на исходник, а запись убираем: она негодна.
             cache.Dispose();
             _cacheStore.Remove(entry.Key);
-            _cacheEntry = null;
+            track.CacheEntry = null;
 
-            _backend = _flyleaf;
-            Subscribe(_backend);
-            _flyleaf.Open(entry.SourcePath);
-            _flyleaf.SeekToFrame(frame);
+            track.Backend = track.Flyleaf;
+            _sync.Rebind();
+            track.Flyleaf.Open(entry.SourcePath);
+            track.Flyleaf.SeekToFrame(frame);
 
-            Status($"кэш не подошёл ({res.Error}) — играю с исходника");
-            UpdateModeBadge();
-            UpdateCachePanel();
+            Status($"{track.Letter}: кэш не подошёл ({res.Error}) — играю с исходника");
+            UpdateState();
+            RestoreMasterTime(masterTime);
             return;
         }
 
-        _backend = cache;
-        Subscribe(_backend);
+        track.Backend = cache;
+        _sync.Rebind();
 
         // Незаконченную запись не отмечаем использованной: Touch сохранил бы
         // entry.json, и полусобранный прокси стал бы выглядеть готовым.
         if (!entry.Partial)
         {
-            _cacheEntry = entry;
+            track.CacheEntry = entry;
             _cacheStore.Touch(entry);
         }
 
-        _backend.SeekToFrame(frame);
-        if (wasPlaying) _backend.Play();
+        track.Backend.SeekToFrame(frame);
+        if (wasPlaying) track.Backend.Play();
 
         if (!entry.Partial)
         {
             // На прокси шаг назад стоит миллисекунды — замер честный и почти бесплатный.
-            _cacheStepMs = StepSpeedProbe.Measure(_backend, _backend.Media!);
-            _backend.SeekToFrame(frame);
+            track.CacheStepMs = StepSpeedProbe.Measure(track.Backend, track.Media!);
+            track.Backend.SeekToFrame(frame);
+
+            track.BuiltFraction = 1;
+            ShowThumbnails(track, entry.ThumbnailFiles());
         }
 
-        if (!entry.Partial)
-        {
-            _builtFraction = 1;
-            Timeline.BuiltFraction = 1;
-            ShowThumbnails(entry.ThumbnailFiles());
-        }
         UpdateState();
-        UpdateModeBadge();
-        UpdateCachePanel();
+        RestoreMasterTime(masterTime);
         Status(message);
     }
 
-    /// <summary>Вернуть окно на прямой декод, ничего не открывая.</summary>
-    private void UseDirectBackend()
+    /// <summary>
+    /// Вернуть playhead на прежний момент времени и пересчитать по нему оба трека.
+    /// Смена движка меняет частоту и число кадров, поэтому «тот же кадр» после неё —
+    /// уже другое время, а видел пользователь именно время.
+    /// </summary>
+    private void RestoreMasterTime(TimeSpan time)
     {
-        if (ReferenceEquals(_backend, _flyleaf)) return;
+        if (!_sync.IsOpen) return;
 
-        Unsubscribe(_backend);
-        _backend.Close();
-        _backend.Dispose();
+        _sync.SetPosition(_sync.TimelineFrameAt(time));
+        SeekFrame(_sync.PositionFrame);
+    }
 
-        _backend = _flyleaf;
-        Subscribe(_backend);
+    /// <summary>Вернуть трек на прямой декод, ничего не открывая.</summary>
+    private void UseDirectBackend(PlayerTrack track)
+    {
+        if (ReferenceEquals(track.Backend, track.Flyleaf)) return;
+
+        track.Backend.Close();
+        track.Backend.Dispose();
+
+        track.Backend = track.Flyleaf;
+        _sync.Rebind();
+    }
+
+    /// <summary>Перевести трек обратно на исходник, сохранив позицию.</summary>
+    private void PlayFromSource(PlayerTrack track, string message)
+    {
+        if (!track.IsOpen || track.Media is not { } media) return;
+
+        var frame = track.Backend.FrameIndex;
+        var playing = track.Backend.IsPlaying;
+        var source = media.FilePath;
+        var masterTime = _sync.PositionTime;
+
+        UseDirectBackend(track);
+
+        var res = track.Flyleaf.Open(source);
+        if (!res.Success)
+        {
+            Status($"{track.Letter}: не открылся исходник — {res.Error}");
+            return;
+        }
+
+        track.Flyleaf.SeekToFrame(frame);
+        if (playing) track.Flyleaf.Play();
+
+        UpdateState();
+        RestoreMasterTime(masterTime);
+        Status(message);
     }
 
     // ---------- панель «Кэш…» ----------
-
-    private void Cache_Click(object sender, RoutedEventArgs e) => ToggleCachePanel();
-
-    /// <summary>
-    /// Панель кэша и панель сведений — обе накладки у правого края, поэтому
-    /// открытая всегда одна: вторая сворачивается.
-    /// </summary>
-    private void ToggleCachePanel()
-    {
-        var open = CachePanel.Visibility == Visibility.Visible;
-
-        if (!open)
-        {
-            UpdateCachePanel();
-            InfoPanel.Visibility = Visibility.Collapsed;
-        }
-
-        CachePanel.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
-        BtnCache.Foreground = (Brush)FindResource(open ? "TextBrush" : "AccentBrush");
-        BtnCache.BorderBrush = (Brush)FindResource(open ? "LineBrush" : "AccentDim");
-        Status(open ? "панель кэша свёрнута (C)" : "панель кэша открыта (C)");
-    }
 
     private void CacheMode_Checked(object sender, RoutedEventArgs e)
     {
@@ -533,21 +539,32 @@ public partial class MainWindow
         switch (mode)
         {
             case FrameCacheMode.Never:
-                CancelBuild();
-                if (_backend is FrameCacheBackend) PlayFromSource("режим «никогда» — играю с исходника");
-                else Status("кэш выключен: только прямой декод");
+                foreach (var track in _sync.Tracks)
+                {
+                    CancelBuild(track);
+                    if (track.Backend is FrameCacheBackend)
+                        PlayFromSource(track, $"{track.Letter}: режим «никогда» — играю с исходника");
+                }
+
+                Status("кэш выключен: только прямой декод");
                 break;
 
             default:
-                // В авто/всегда решение принимается заново — вдруг файл уже открыт.
-                if (_backend.IsOpen && _backend.Media is { FromCache: false } && _buildCts is null)
-                    DecideCache(_backend.Media.FilePath);
-                else
-                    Status($"режим кэша: {ModeName(mode)}");
+                // В авто/всегда решение принимается заново — вдруг файлы уже открыты.
+                var decided = false;
+                foreach (var track in _sync.OpenTracks.ToList())
+                {
+                    if (track.Media is not { FromCache: false } || track.BuildCts is not null) continue;
+
+                    DecideCache(track, track.Media.FilePath);
+                    decided = true;
+                }
+
+                if (!decided) Status($"режим кэша: {ModeName(mode)}");
                 break;
         }
 
-        UpdateModeBadge();
+        UpdateModeBadges();
         UpdateCachePanel();
     }
 
@@ -566,57 +583,65 @@ public partial class MainWindow
         App.Settings.Save();
         Status($"частота прокси: {FpsName(fps)}");
 
-        if (!_backend.IsOpen || App.Settings.CacheMode == FrameCacheMode.Never)
+        if (App.Settings.CacheMode == FrameCacheMode.Never)
         {
             UpdateCachePanel();
             return;
         }
 
-        CancelBuild();
+        foreach (var track in _sync.OpenTracks.ToList())
+        {
+            CancelBuild(track);
 
-        // Играющий прокси собран по старой частоте — сначала возвращаемся на исходник.
-        var source = _backend.Media!.FilePath;
-        if (_backend is FrameCacheBackend) PlayFromSource($"частота прокси: {FpsName(fps)} — пересобираю кэш");
+            // Играющий прокси собран по старой частоте — сначала на исходник.
+            var source = track.Media!.FilePath;
+            if (track.Backend is FrameCacheBackend)
+                PlayFromSource(track, $"{track.Letter}: частота прокси {FpsName(fps)} — пересобираю кэш");
 
-        _cacheEntry = null;
-        ClearThumbnails();
-        DecideCache(source);
+            track.CacheEntry = null;
+            ClearThumbnails(track);
+            DecideCache(track, source);
+        }
     }
 
     private void CacheRebuild_Click(object sender, RoutedEventArgs e)
     {
-        if (!_backend.IsOpen || _buildCts is not null) return;
+        var track = SideTrack;
+        if (!track.IsOpen || track.BuildCts is not null) return;
 
-        var source = _backend.Media!.FilePath;
-        PlayFromSource("пересобираю кэш — пока играю с исходника");
+        var source = track.Media!.FilePath;
+        PlayFromSource(track, $"{track.Letter}: пересобираю кэш — пока играю с исходника");
 
-        if (_cacheKey is { } key)
+        if (track.CacheKey is { } key)
         {
             _cacheStore.Remove(key);
-            _cacheEntry = null;
+            track.CacheEntry = null;
         }
         else
         {
-            try { _cacheKey = CacheKey.For(source, ProxyCacheBuilder.Signature(App.Settings.CacheFps)); }
-            catch (Exception ex) { Status($"кэш недоступен: {ex.Message}"); return; }
+            try { track.CacheKey = CacheKey.For(source, ProxyCacheBuilder.Signature(App.Settings.CacheFps)); }
+            catch (Exception ex) { Status($"{track.Letter}: кэш недоступен — {ex.Message}"); return; }
         }
 
-        ClearThumbnails();
-        if (_flyleaf.Media is { } media) StartBuild(media);
+        ClearThumbnails(track);
+        if (track.Flyleaf.Media is { } media) StartBuild(track, media);
     }
 
     private void CacheUseSource_Click(object sender, RoutedEventArgs e)
     {
-        if (_backend is not FrameCacheBackend) return;
-        PlayFromSource("играю с исходника — кэш остаётся на диске");
+        var track = SideTrack;
+        if (track.Backend is not FrameCacheBackend) return;
+
+        PlayFromSource(track, $"{track.Letter}: играю с исходника — кэш остаётся на диске");
         UpdateCachePanel();
     }
 
     private void CacheCancel_Click(object sender, RoutedEventArgs e)
     {
-        if (_buildCts is null) return;
-        CancelBuild();
-        Status("отменяю сборку кэша…");
+        if (_building is not { } track) return;
+
+        CancelBuild(track);
+        Status($"{track.Letter}: отменяю сборку кэша…");
     }
 
     private void CacheOpenFolder_Click(object sender, RoutedEventArgs e)
@@ -634,42 +659,22 @@ public partial class MainWindow
 
     private void CacheClear_Click(object sender, RoutedEventArgs e)
     {
-        CancelBuild();
+        foreach (var track in _sync.Tracks) CancelBuild(track);
 
-        // Запись открытого файла не трогаем: удалять прокси из-под играющего плеера нельзя.
-        var keep = _backend is FrameCacheBackend cache ? cache.Entry.Key : null;
+        // Записи открытых файлов не трогаем: удалять прокси из-под играющего плеера нельзя.
+        var keep = _sync.Tracks
+            .Select(t => t.Backend is FrameCacheBackend cache ? cache.Entry.Key : null)
+            .Where(k => k is not null)
+            .Cast<string>()
+            .ToArray();
+
         var removed = _cacheStore.Clear(keep);
 
         Status(removed > 0
-            ? $"кэш очищен: удалено записей — {removed}" + (keep is null ? "" : ", кроме открытого файла")
+            ? $"кэш очищен: удалено записей — {removed}" + (keep.Length == 0 ? "" : ", кроме открытых файлов")
             : "в кэше нечего удалять");
 
         UpdateCachePanel();
-    }
-
-    /// <summary>Перевести плеер обратно на исходник, сохранив позицию.</summary>
-    private void PlayFromSource(string message)
-    {
-        if (!_backend.IsOpen || _backend.Media is not { } media) return;
-
-        var frame = _backend.FrameIndex;
-        var playing = _backend.IsPlaying;
-        var source = media.FilePath;
-
-        UseDirectBackend();
-
-        var res = _flyleaf.Open(source);
-        if (!res.Success)
-        {
-            Status($"не открылся исходник: {res.Error}");
-            return;
-        }
-
-        _flyleaf.SeekToFrame(frame);
-        if (playing) _flyleaf.Play();
-        UpdateState();
-        UpdateModeBadge();
-        Status(message);
     }
 
     // ---------- индикаторы ----------
@@ -684,50 +689,72 @@ public partial class MainWindow
 
         if (visible) return;
 
-        _buildEta = "";
-        ModeBadge.ToolTip = null;
+        foreach (var track in _sync.Tracks)
+        {
+            if (track.BuildCts is not null) continue;
 
-        // Собранный целиком кэш кромкой не отмечается: она отвечает на вопрос
-        // «докуда уже быстро», а на готовом кэше быстро везде.
-        Timeline.BuiltFraction = _builtFraction >= 1 ? 1 : 0;
+            track.BuildEta = "";
+
+            // Собранный целиком кэш кромкой не отмечается: она отвечает на вопрос
+            // «докуда уже быстро», а на готовом кэше быстро везде.
+            if (track.BuiltFraction < 1) track.BuiltFraction = 0;
+        }
+
+        ModeBadge.ToolTip = null;
+        ModeBadgeB.ToolTip = null;
     }
 
-    private void UpdateModeBadge()
+    private FrameworkElement BuildBadge(PlayerTrack track) => track.Id == TrackId.A ? ModeBadge : ModeBadgeB;
+
+    private void UpdateModeBadges()
     {
-        string text;
+        UpdateModeBadge(_a, ModeText, ModeDot, ModeBadge);
+        UpdateModeBadge(_b, ModeTextB, ModeDotB, ModeBadgeB);
+    }
+
+    private void UpdateModeBadge(PlayerTrack track, TextBlock text, Shape dot, Border badge)
+    {
+        string label;
         string brush;
 
-        if (!_backend.IsOpen)
+        if (!track.IsOpen)
         {
-            text = "файл не открыт";
+            label = track.Id == TrackId.A ? "файл не открыт" : $"{track.Letter} —";
             brush = "MutedBrush";
         }
-        else if (_buildCts is not null && _backend.Media is { FromCache: true })
+        else if (track.BuildCts is not null && track.Media is { FromCache: true })
         {
             // Уже играем из кэша, хотя он ещё достраивается.
-            text = $"кэш · сборка {_buildPercent:F0} %{Remaining()}";
+            label = $"{track.Letter} кэш · сборка {track.BuildPercent:F0} %{Remaining(track)}";
             brush = "OkBrush";
         }
-        else if (_buildCts is not null)
+        else if (track.BuildCts is not null)
         {
-            text = $"сборка кэша {_buildPercent:F0} %{Remaining()}";
+            label = $"{track.Letter} сборка кэша {track.BuildPercent:F0} %{Remaining(track)}";
             brush = "AccentBrush";
         }
-        else if (_backend.Media is { FromCache: true })
+        else if (ReferenceEquals(_queued, track))
         {
-            text = _cacheStepMs > 0 ? $"кэш · шаг {_cacheStepMs:F0} мс" : "кэш";
+            label = $"{track.Letter} кэш в очереди";
+            brush = "MutedBrush";
+        }
+        else if (track.Media is { FromCache: true })
+        {
+            label = track.CacheStepMs > 0 ? $"{track.Letter} кэш · шаг {track.CacheStepMs:F0} мс" : $"{track.Letter} кэш";
             brush = "OkBrush";
         }
         else
         {
-            text = _sourceStepMs > 0 ? $"прямой декод · шаг {_sourceStepMs:F0} мс" : "прямой декод";
+            label = track.SourceStepMs > 0
+                ? $"{track.Letter} прямой декод · шаг {track.SourceStepMs:F0} мс"
+                : $"{track.Letter} прямой декод";
             brush = "MutedBrush";
         }
 
-        ModeText.Text = text;
-        ModeText.Foreground = (Brush)FindResource(brush);
-        ModeDot.Fill = (Brush)FindResource(brush == "MutedBrush" ? "DimBrush" : brush);
-        ModeBadge.BorderBrush = (Brush)FindResource(brush == "MutedBrush" ? "LineBrush" : brush);
+        text.Text = label;
+        text.Foreground = (Brush)FindResource(brush);
+        dot.Fill = (Brush)FindResource(brush == "MutedBrush" ? "DimBrush" : brush);
+        badge.BorderBrush = (Brush)FindResource(brush == "MutedBrush" ? "LineBrush" : brush);
     }
 
     /// <summary>
@@ -735,10 +762,10 @@ public partial class MainWindow
     /// число уже не совпадают с исходником. Молчать об этом нельзя, поэтому в
     /// сведениях появляется предупреждение.
     /// </summary>
-    private void UpdateProxyNote()
+    private void UpdateProxyNote(PlayerTrack track)
     {
-        var entry = _cacheEntry;
-        var reduced = _backend.Media is { FromCache: true }
+        var entry = track.CacheEntry;
+        var reduced = track.Media is { FromCache: true }
                       && entry is not null
                       && entry.SourceFps > 0
                       && Math.Abs(entry.Fps - entry.SourceFps) > 0.01;
@@ -754,26 +781,28 @@ public partial class MainWindow
 
     private void UpdateCachePanel()
     {
-        var open = _backend.IsOpen;
-        var fromCache = _backend.Media is { FromCache: true };
+        var track = SideTrack;
+        var open = track.IsOpen;
+        var fromCache = track.Media is { FromCache: true };
+
+        CacheFileHeader.Text = $"Т Р Е К   {track.Letter}";
 
         CacheFileMode.Text = !open ? "—"
-            : _buildCts is not null && fromCache ? "кэш, идёт сборка"
-            : _buildCts is not null ? "сборка"
+            : track.BuildCts is not null && fromCache ? "кэш, идёт сборка"
+            : track.BuildCts is not null ? "сборка"
+            : ReferenceEquals(_queued, track) ? "в очереди на сборку"
             : fromCache ? "кэш"
             : "прямой декод";
 
         CacheFileStep.Text = !open ? "—"
-            : $"{(_cacheStepMs > 0 ? $"{_cacheStepMs:F0} мс" : "—")} / " +
-              $"{(_sourceStepMs > 0 ? $"{_sourceStepMs:F0} мс" : "—")}";
+            : $"{(track.CacheStepMs > 0 ? $"{track.CacheStepMs:F0} мс" : "—")} / " +
+              $"{(track.SourceStepMs > 0 ? $"{track.SourceStepMs:F0} мс" : "—")}";
 
-        var entry = _cacheEntry;
-        CacheFileProxy.Text = entry is null
-            ? "—"
-            : $"{Size(entry.Bytes)} · {entry.Fps:0.###} fps";
+        var entry = track.CacheEntry;
+        CacheFileProxy.Text = entry is null ? "—" : $"{Size(entry.Bytes)} · {entry.Fps:0.###} fps";
         CacheFileBuilt.Text = entry is null ? "—" : entry.CreatedUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 
-        BtnRebuild.IsEnabled = open && _buildCts is null && App.Settings.CacheMode != FrameCacheMode.Never;
+        BtnRebuild.IsEnabled = open && track.BuildCts is null && App.Settings.CacheMode != FrameCacheMode.Never;
         BtnUseSource.IsEnabled = fromCache;
 
         var entries = _cacheStore.All();
@@ -787,54 +816,54 @@ public partial class MainWindow
     // ---------- миниатюры ----------
 
     /// <summary>
-    /// Отдать таймлайну те миниатюры, что уже сняты. Пустой список — тоже состояние:
-    /// клип рисуется штриховкой и заполняется кадрами по мере сборки.
+    /// Отдать таймлайну те миниатюры трека, что уже сняты. Пустой список — тоже
+    /// состояние: клип рисуется штриховкой и заполняется кадрами по мере сборки.
     /// </summary>
-    private void ShowThumbnails(IReadOnlyList<string> files)
+    private void ShowThumbnails(PlayerTrack track, IReadOnlyList<string> files)
     {
-        _thumbFiles = files;
+        track.ThumbFiles = files;
 
-        if (_backend.Media is { } media && media.Duration > TimeSpan.Zero)
+        if (track.Media is { } media && media.Duration > TimeSpan.Zero)
         {
             var (planned, interval) = ProxyCacheBuilder.ThumbnailPlan(media.Duration, media.FrameCount);
-            _thumbInterval = planned > 0 ? interval : 0;
+            track.ThumbInterval = planned > 0 ? interval : 0;
         }
 
-        Timeline.HasThumbnails = files.Count > 0 || _buildCts is not null;
-        Timeline.InvalidateVisual();
+        track.HasThumbnails = files.Count > 0 || track.BuildCts is not null;
+        RefreshTimeline();
     }
 
     /// <summary>
     /// Миниатюра для момента ролика: клетка клипа спрашивает кадр своего места на шкале.
     /// null — кадр ещё не снят (сборка досюда не дошла), и клетка остаётся заштрихованной.
     /// </summary>
-    private ImageSource? ThumbnailAt(TimeSpan time)
+    private ImageSource? ThumbnailAt(PlayerTrack track, TimeSpan time)
     {
-        if (_thumbFiles.Count == 0 || _thumbInterval <= 0) return null;
+        if (track.ThumbFiles.Count == 0 || track.ThumbInterval <= 0) return null;
 
-        var index = (int)(time.TotalSeconds / _thumbInterval);
-        if (index < 0 || index >= _thumbFiles.Count) return null;
+        var index = (int)(time.TotalSeconds / track.ThumbInterval);
+        if (index < 0 || index >= track.ThumbFiles.Count) return null;
 
-        return LoadThumbnail(_thumbFiles[index]);
+        return LoadThumbnail(track, track.ThumbFiles[index]);
     }
 
-    private void ClearThumbnails()
+    private void ClearThumbnails(PlayerTrack track)
     {
-        _thumbFiles = [];
-        _thumbInterval = 0;
-        _thumbCache.Clear();
+        track.ThumbFiles = [];
+        track.ThumbInterval = 0;
+        track.ThumbImages.Clear();
+        track.HasThumbnails = false;
 
-        Timeline.HasThumbnails = false;
-        Timeline.InvalidateVisual();
+        RefreshTimeline();
     }
 
     /// <summary>
     /// Загрузка с <see cref="BitmapCacheOption.OnLoad"/>: файл сразу закрывается,
     /// иначе очистка кэша спотыкалась бы о занятые картинки.
     /// </summary>
-    private ImageSource? LoadThumbnail(string path)
+    private static ImageSource? LoadThumbnail(PlayerTrack track, string path)
     {
-        if (_thumbCache.TryGetValue(path, out var cached)) return cached;
+        if (track.ThumbImages.TryGetValue(path, out var cached)) return cached;
 
         try
         {
@@ -846,7 +875,7 @@ public partial class MainWindow
             bitmap.EndInit();
             bitmap.Freeze();
 
-            _thumbCache[path] = bitmap;
+            track.ThumbImages[path] = bitmap;
             return bitmap;
         }
         catch (Exception)
@@ -858,7 +887,7 @@ public partial class MainWindow
 
     // ---------- форматирование ----------
 
-    private string Remaining() => _buildEta.Length > 0 ? $" · ~{_buildEta}" : "";
+    private static string Remaining(PlayerTrack track) => track.BuildEta.Length > 0 ? $" · ~{track.BuildEta}" : "";
 
     private static string FpsName(double fps) =>
         fps > 0 ? $"{fps.ToString("0.###", CultureInfo.InvariantCulture)} кадров/с" : "как в исходнике";

@@ -96,9 +96,15 @@ public sealed class FrameCacheStore
         }
     }
 
-    /// <summary>Очистить всё, кроме записи <paramref name="keepKey"/>.</summary>
-    public int Clear(string? keepKey = null)
-        => All().Count(e => e.Key != keepKey && Remove(e.Key));
+    /// <summary>
+    /// Очистить всё, кроме перечисленных записей. Беречь приходится несколько:
+    /// с фазы 3 открытых файлов два, и прокси каждого нельзя удалять из-под плеера.
+    /// </summary>
+    public int Clear(params string?[] keepKeys)
+    {
+        var keep = keepKeys.Where(k => !string.IsNullOrEmpty(k)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return All().Count(e => !keep.Contains(e.Key) && Remove(e.Key));
+    }
 
     private static CacheEntry? Read(string dir)
     {

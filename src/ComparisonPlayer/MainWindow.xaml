@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fl="clr-namespace:FlyleafLib.Controls.WPF;assembly=FlyleafLib"
         xmlns:tl="clr-namespace:ComparisonPlayer.Timeline"
-        Title="ComparisonVideoPlayer" Icon="app.ico" Height="760" Width="1240"
-        MinHeight="480" MinWidth="900"
+        Title="ComparisonVideoPlayer" Icon="app.ico" Height="820" Width="1320"
+        MinHeight="520" MinWidth="960"
         Background="{StaticResource PanelBrush}"
         Foreground="{StaticResource TextBrush}"
         FontFamily="Segoe UI" FontSize="14"
@@ -23,19 +23,33 @@
         <!-- Панель инструментов -->
         <Border Grid.Row="0" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1" Padding="12,8">
             <DockPanel LastChildFill="False">
-                <Button x:Name="BtnOpen" Style="{StaticResource PrimaryButton}" Click="Open_Click">
+                <Button x:Name="BtnOpenA" Style="{StaticResource PrimaryButton}" Click="OpenA_Click"
+                        ToolTip="Открыть файл в трек A (Ctrl+O)">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Открыть файл" />
+                        <TextBlock Text="Открыть A" />
                         <TextBlock Text="Ctrl+O" Margin="8,0,0,0" FontSize="11"
                                    FontFamily="{StaticResource MonoFont}"
                                    Foreground="{StaticResource DimBrush}" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <Button x:Name="BtnClose" Style="{StaticResource ToolButton}" Content="Закрыть" Click="Close_Click" />
+                <Button x:Name="BtnOpenB" Style="{StaticResource ToolButton}" Click="OpenB_Click"
+                        Foreground="{StaticResource TrackBBrush}" BorderBrush="{StaticResource TrackBDim}"
+                        ToolTip="Открыть файл в трек B (Ctrl+Shift+O)">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Открыть B" />
+                        <TextBlock Text="Ctrl+Shift+O" Margin="8,0,0,0" FontSize="11"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   Foreground="{StaticResource DimBrush}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnClose" Style="{StaticResource ToolButton}" Content="Закрыть" Click="Close_Click"
+                        ToolTip="Закрыть файл активного трека" />
                 <Button x:Name="BtnInfo" Style="{StaticResource ToolButton}" Content="Сведения" Click="Info_Click"
-                        ToolTip="Сведения о файле поверх кадра (Ctrl+I)" />
+                        ToolTip="Сведения о файле (Ctrl+I)" />
+                <Button x:Name="BtnLayout" Style="{StaticResource ToolButton}" Content="Рядом" Click="Layout_Click"
+                        ToolTip="Что показывать: рядом / только A / только B (V)" />
 
-                <!-- Кэш кадров: индикатор режима и панель управления -->
+                <!-- Кэш кадров: индикаторы режима по треку и панель управления -->
                 <Button x:Name="BtnCache" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
                         Content="Кэш…" Margin="8,0,0,0" Click="Cache_Click"
                         ToolTip="Режим кэша кадров, объём хранилища (C)" />
@@ -43,6 +57,17 @@
                 <Button x:Name="BtnBuildCancel" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
                         Content="Отменить" Margin="8,0,0,0" Visibility="Collapsed" Click="CacheCancel_Click"
                         ToolTip="Остановить сборку кэша" />
+
+                <Border x:Name="ModeBadgeB" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
+                        Background="{StaticResource Panel2Brush}" BorderBrush="{StaticResource LineBrush}"
+                        BorderThickness="1" CornerRadius="4" Padding="10,4" Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="ModeDotB" Width="7" Height="7" VerticalAlignment="Center"
+                                 Fill="{StaticResource DimBrush}" />
+                        <TextBlock x:Name="ModeTextB" Margin="7,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                   FontSize="12.5" Foreground="{StaticResource MutedBrush}" Text="B —" />
+                    </StackPanel>
+                </Border>
 
                 <Border x:Name="ModeBadge" DockPanel.Dock="Right" VerticalAlignment="Center"
                         Background="{StaticResource Panel2Brush}" BorderBrush="{StaticResource LineBrush}"
@@ -58,231 +83,308 @@
             </DockPanel>
         </Border>
 
-        <!-- Кадр; панель сведений всплывает поверх него -->
+        <!-- Кадры и боковая панель.
+             Панели «Сведения» и «Кэш…» фаз 1 и 4 были накладками поверх кадра: при двух
+             окнах вывода FlyleafLib накладка одного трека закрывала бы второй кадр,
+             поэтому теперь это колонка сбоку. -->
         <Grid Grid.Row="1">
-            <Border Background="{StaticResource VideoBrush}">
-                <fl:FlyleafHost x:Name="VideoHost"
-                                VideoBackground="{StaticResource VideoBrush}"
-                                KeyBindings="None" OpenOnDrop="None" SwapOnDrop="None"
-                                ToggleFullScreenOnDoubleClick="None">
-                    <!-- Содержимое FlyleafHost живёт в окне-накладке поверх поверхности вывода -->
-                    <Grid x:Name="OverlayRoot" Background="Transparent" AllowDrop="True">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-                        <!-- Пустое состояние: непрозрачное, чтобы не просвечивал последний кадр -->
-                        <Grid x:Name="EmptyState" Background="{StaticResource VideoBrush}">
-                            <Border x:Name="DropFrame" Margin="18" CornerRadius="6"
-                                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1.5">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="Transparent" />
-                                    </Style>
-                                </Border.Style>
+            <Grid x:Name="Stage" Grid.Column="0" Background="{StaticResource VideoBrush}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="PaneAColumn" Width="*" />
+                    <ColumnDefinition x:Name="PaneBColumn" Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Трек A -->
+                <Border x:Name="PaneA" Grid.Column="0" Background="{StaticResource VideoBrush}"
+                        BorderBrush="{StaticResource LineBrush}" BorderThickness="0">
+                    <fl:FlyleafHost x:Name="VideoHostA"
+                                    VideoBackground="{StaticResource VideoBrush}"
+                                    KeyBindings="None" OpenOnDrop="None" SwapOnDrop="None"
+                                    ToggleFullScreenOnDoubleClick="None">
+                        <Grid x:Name="OverlayA" Background="Transparent" AllowDrop="True">
+
+                            <Grid x:Name="EmptyA" Background="{StaticResource VideoBrush}">
+                                <Border x:Name="DropFrameA" Margin="18" CornerRadius="6"
+                                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1.5">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock x:Name="DropTitleA" Text="Трек A пуст"
+                                                   FontSize="17" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextBrush}"
+                                                   HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="DropHintA"
+                                                   Text="перетащите видео сюда · mp4, mkv, mov, avi, ts"
+                                                   FontSize="13" Margin="0,10,0,0"
+                                                   Foreground="{StaticResource MutedBrush}"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Кадра нет: сдвиг увёл трек за край материала или за отрезок -->
+                            <Grid x:Name="NoFrameA" Background="{StaticResource VideoBrush}" Visibility="Collapsed">
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock x:Name="DropTitle" Text="Перетащите видео сюда"
-                                               FontSize="17" FontWeight="SemiBold"
-                                               Foreground="{StaticResource TextBrush}"
-                                               HorizontalAlignment="Center" />
-                                    <TextBlock x:Name="DropHint"
-                                               Text="или нажмите «Открыть файл» · mp4, mkv, mov, avi, ts"
-                                               FontSize="13" Margin="0,10,0,0"
-                                               Foreground="{StaticResource MutedBrush}"
-                                               HorizontalAlignment="Center" />
+                                    <TextBlock Text="нет кадра" FontSize="15" FontWeight="SemiBold"
+                                               Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" />
+                                    <TextBlock x:Name="NoFrameHintA" FontSize="12.5" Margin="0,6,0,0"
+                                               Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Метка трека: видна всегда, иначе не понять, где какой файл -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
+                                    Panel.ZIndex="2" CornerRadius="4" Padding="9,4" Background="#A8050709">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="A" FontFamily="{StaticResource MonoFont}" FontWeight="Bold"
+                                               FontSize="13" Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock x:Name="PaneNameA" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                               FontSize="12.5" Foreground="#F3F5FA" MaxWidth="240"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="PaneOsdA" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                               FontSize="12.5" Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock x:Name="PaneMasterA" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                               FontSize="12.5" Foreground="{StaticResource DimBrush}" />
                                 </StackPanel>
                             </Border>
                         </Grid>
+                    </fl:FlyleafHost>
+                </Border>
 
-                        <!-- Таймкод поверх кадра, переключается клавишей T -->
-                        <Border x:Name="Osd" HorizontalAlignment="Left" VerticalAlignment="Top"
-                                Margin="14,12,0,0" Panel.ZIndex="1" CornerRadius="4" Padding="9,4"
-                                Background="#A8050709" Visibility="Collapsed">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock x:Name="OsdTime" FontFamily="{StaticResource MonoFont}"
-                                           FontSize="13" Foreground="#F3F5FA" />
-                                <TextBlock Text=" · " FontFamily="{StaticResource MonoFont}" FontSize="13"
-                                           Foreground="{StaticResource DimBrush}" />
-                                <TextBlock x:Name="OsdFrame" FontFamily="{StaticResource MonoFont}"
-                                           FontSize="13" Foreground="{StaticResource AccentBrush}" />
-                            </StackPanel>
-                        </Border>
+                <!-- Трек B -->
+                <Border x:Name="PaneB" Grid.Column="1" Background="{StaticResource VideoBrush}"
+                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1,0,0,0">
+                    <fl:FlyleafHost x:Name="VideoHostB"
+                                    VideoBackground="{StaticResource VideoBrush}"
+                                    KeyBindings="None" OpenOnDrop="None" SwapOnDrop="None"
+                                    ToggleFullScreenOnDoubleClick="None">
+                        <Grid x:Name="OverlayB" Background="Transparent" AllowDrop="True">
 
-                        <!-- Сведения о файле: панель поверх кадра справа, по умолчанию свёрнута -->
-                        <Border x:Name="InfoPanel" Width="250" HorizontalAlignment="Right"
-                                Background="#F2161923" BorderBrush="{StaticResource LineBrush}"
-                                BorderThickness="1,0,0,0" Padding="14,12" Visibility="Collapsed">
-                            <StackPanel>
-                                <Grid Margin="0,0,0,12">
-                                    <TextBlock Text="С В Е Д Е Н И Я" Style="{StaticResource PanelHeader}"
-                                               Margin="0" VerticalAlignment="Center" />
-                                    <Button Content="✕" Click="Info_Click" Style="{StaticResource ToolButton}"
-                                            HorizontalAlignment="Right" Margin="0" Padding="7,1" FontSize="11"
-                                            ToolTip="Свернуть (Ctrl+I)" />
-                                </Grid>
+                            <Grid x:Name="EmptyB" Background="{StaticResource VideoBrush}">
+                                <Border x:Name="DropFrameB" Margin="18" CornerRadius="6"
+                                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1.5">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock x:Name="DropTitleB" Text="Трек B пуст"
+                                                   FontSize="17" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextBrush}"
+                                                   HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="DropHintB"
+                                                   Text="перетащите сюда второй ролик"
+                                                   FontSize="13" Margin="0,10,0,0"
+                                                   Foreground="{StaticResource MutedBrush}"
+                                                   HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
 
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Файл" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="InfoFile"
-                                               Style="{StaticResource PanelValue}" TextTrimming="CharacterEllipsis" />
-
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Кодек" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="InfoCodec" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Размер" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="InfoSize" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Частота" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="InfoFps" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Режим" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="4" Grid.Column="1" x:Name="InfoRate" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Длительность" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="5" Grid.Column="1" x:Name="InfoDuration" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Кадров" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="6" Grid.Column="1" x:Name="InfoFrames" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Кадры из" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="7" Grid.Column="1" x:Name="InfoSource" Style="{StaticResource PanelValue}" />
-                                </Grid>
-
-                                <TextBlock x:Name="InfoProxyNote" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12"
-                                           Foreground="{StaticResource WarnBrush}" Visibility="Collapsed" />
-
-                                <TextBlock x:Name="InfoVfrNote" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12"
-                                           Foreground="{StaticResource WarnBrush}" Visibility="Collapsed"
-                                           Text="Переменная частота кадров: номер кадра вычисляется по времени и может отличаться от нумерации в других программах." />
-                            </StackPanel>
-                        </Border>
-                        <!-- Панель «Кэш…»: накладка поверх кадра, как и «Сведения».
-                             Обычное окно Popup здесь не годится — окна вывода FlyleafLib
-                             перекрывают его, и панель не видна. -->
-                        <Border x:Name="CachePanel" Width="360" HorizontalAlignment="Right" Visibility="Collapsed"
-                                Background="#F2161923" BorderBrush="{StaticResource LineBrush}"
-                                BorderThickness="1,0,0,0" Padding="14,12">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel Margin="0,0,6,0">
-                                <Grid Margin="0,0,0,12">
-                                    <TextBlock Text="К Э Ш   К А Д Р О В" Style="{StaticResource PanelHeader}"
-                                               Margin="0" VerticalAlignment="Center" />
-                                    <Button Content="✕" Click="Cache_Click" Style="{StaticResource ToolButton}"
-                                            HorizontalAlignment="Right" Margin="0" Padding="7,1" FontSize="11"
-                                            ToolTip="Свернуть (C)" />
-                                </Grid>
-
-                                <TextBlock Text="Р Е Ж И М   К Э Ш А" Style="{StaticResource PanelHeader}" />
-
-                                <RadioButton x:Name="RbAuto" Style="{StaticResource CacheRadio}"
-                                             Content="Автоматически" Checked="CacheMode_Checked" Tag="Auto" />
-                                <TextBlock x:Name="RbAutoHint" Style="{StaticResource PanelHint}"
-                                           Text="строить, если шаг назад медленнее 250 мс" />
-
-                                <RadioButton x:Name="RbAlways" Style="{StaticResource CacheRadio}"
-                                             Content="Всегда — для любого открытого файла"
-                                             Checked="CacheMode_Checked" Tag="Always" />
-
-                                <RadioButton x:Name="RbNever" Style="{StaticResource CacheRadio}"
-                                             Content="Никогда — только прямой декод"
-                                             Checked="CacheMode_Checked" Tag="Never" />
-
-                                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,4,0,10" />
-
-                                <TextBlock Text="Ч А С Т О Т А   П Р О К С И" Style="{StaticResource PanelHeader}" />
-                                <WrapPanel x:Name="CacheFpsChips">
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="0"
-                                                 Content="как в исходнике" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="60"
-                                                 Content="60" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="50"
-                                                 Content="50" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="30"
-                                                 Content="30" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="25"
-                                                 Content="25" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="24"
-                                                 Content="24" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="15"
-                                                 Content="15" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="12"
-                                                 Content="12" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="10"
-                                                 Content="10" Checked="CacheFps_Checked" />
-                                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="5"
-                                                 Content="5" Checked="CacheFps_Checked" />
-                                </WrapPanel>
-                                <TextBlock x:Name="CacheFpsHint" Style="{StaticResource PanelHint}" Margin="0,1,0,4"
-                                           Text="ниже исходной — кэш меньше и собирается быстрее, но кадры прореживаются, а их номера становятся номерами прокси" />
-
-                                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,4,0,10" />
-
-                                <TextBlock Text="Э Т О Т   Ф А Й Л" Style="{StaticResource PanelHeader}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Режим" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="CacheFileMode" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Шаг назад" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="CacheFileStep" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Прокси" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="CacheFileProxy" Style="{StaticResource PanelValue}" />
-
-                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Собран" Style="{StaticResource PanelKey}" />
-                                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="CacheFileBuilt" Style="{StaticResource PanelValue}" />
-                                </Grid>
-
-                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                    <Button x:Name="BtnRebuild" Style="{StaticResource ToolButton}"
-                                            Content="Собрать заново" Click="CacheRebuild_Click" />
-                                    <Button x:Name="BtnUseSource" Style="{StaticResource ToolButton}"
-                                            Content="Играть с исходника" Click="CacheUseSource_Click" />
+                            <Grid x:Name="NoFrameB" Background="{StaticResource VideoBrush}" Visibility="Collapsed">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="нет кадра" FontSize="15" FontWeight="SemiBold"
+                                               Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" />
+                                    <TextBlock x:Name="NoFrameHintB" FontSize="12.5" Margin="0,6,0,0"
+                                               Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center" />
                                 </StackPanel>
+                            </Grid>
 
-                                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,10" />
-
-                                <TextBlock Text="Х Р А Н И Л И Щ Е" Style="{StaticResource PanelHeader}" />
-                                <TextBlock x:Name="CacheStorageText" FontFamily="{StaticResource MonoFont}" FontSize="12.5"
-                                           Foreground="{StaticResource TextBrush}" Margin="0,0,0,7" />
-                                <ProgressBar x:Name="CacheStorageBar" Style="{StaticResource CacheProgressBar}" Value="0" />
-
-                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                    <Button Style="{StaticResource ToolButton}" Content="Открыть папку" Click="CacheOpenFolder_Click" />
-                                    <Button Style="{StaticResource ToolButton}" Content="Очистить всё" Click="CacheClear_Click" />
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
+                                    Panel.ZIndex="2" CornerRadius="4" Padding="9,4" Background="#A8050709">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="B" FontFamily="{StaticResource MonoFont}" FontWeight="Bold"
+                                               FontSize="13" Foreground="{StaticResource TrackBBrush}" />
+                                    <TextBlock x:Name="PaneNameB" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                               FontSize="12.5" Foreground="#F3F5FA" MaxWidth="240"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="PaneOsdB" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                               FontSize="12.5" Foreground="{StaticResource TrackBBrush}" />
+                                    <TextBlock x:Name="PaneMasterB" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                               FontSize="12.5" Foreground="{StaticResource DimBrush}" />
                                 </StackPanel>
+                            </Border>
+                        </Grid>
+                    </fl:FlyleafHost>
+                </Border>
+            </Grid>
+
+            <!-- Боковая панель: «Сведения» и «Кэш…» с вкладками A / B -->
+            <Border x:Name="SidePanel" Grid.Column="1" Width="340" Visibility="Collapsed"
+                    Background="{StaticResource PanelBrush}" BorderBrush="{StaticResource LineBrush}"
+                    BorderThickness="1,0,0,0" Padding="14,12">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,0,6,0">
+
+                        <Grid Margin="0,0,0,12">
+                            <TextBlock x:Name="SideTitle" Text="С В Е Д Е Н И Я"
+                                       Style="{StaticResource PanelHeader}" Margin="0" VerticalAlignment="Center" />
+                            <Button Content="✕" Click="SideClose_Click" Style="{StaticResource ToolButton}"
+                                    HorizontalAlignment="Right" Margin="0" Padding="7,1" FontSize="11"
+                                    ToolTip="Свернуть панель" />
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <RadioButton x:Name="TabA" Style="{StaticResource TrackTab}" GroupName="SideTrack"
+                                         Content="A" Checked="SideTab_Checked" Tag="A" />
+                            <RadioButton x:Name="TabB" Style="{StaticResource TrackTab}" GroupName="SideTrack"
+                                         Content="B" Checked="SideTab_Checked" Tag="B" />
+                        </StackPanel>
+
+                        <!-- Сведения -->
+                        <StackPanel x:Name="InfoSection">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Файл" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="InfoFile"
+                                           Style="{StaticResource PanelValue}" TextTrimming="CharacterEllipsis" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Кодек" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="InfoCodec" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Размер" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="InfoSize" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Частота" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="InfoFps" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Режим" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" x:Name="InfoRate" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Длительность" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" x:Name="InfoDuration" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Кадров" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" x:Name="InfoFrames" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="7" Grid.Column="0" Text="Кадры из" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="7" Grid.Column="1" x:Name="InfoSource" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="8" Grid.Column="0" Text="Роль" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="8" Grid.Column="1" x:Name="InfoRole" Style="{StaticResource PanelValue}" />
+                            </Grid>
+
+                            <TextBlock x:Name="InfoProxyNote" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{StaticResource WarnBrush}" Visibility="Collapsed" />
+
+                            <TextBlock x:Name="InfoVfrNote" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12"
+                                       Foreground="{StaticResource WarnBrush}" Visibility="Collapsed"
+                                       Text="Переменная частота кадров: номер кадра вычисляется по времени и может отличаться от нумерации в других программах." />
+                        </StackPanel>
+
+                        <!-- Кэш кадров -->
+                        <StackPanel x:Name="CacheSection" Visibility="Collapsed">
+                            <TextBlock Text="Р Е Ж И М   К Э Ш А" Style="{StaticResource PanelHeader}" />
+
+                            <RadioButton x:Name="RbAuto" Style="{StaticResource CacheRadio}"
+                                         Content="Автоматически" Checked="CacheMode_Checked" Tag="Auto" />
+                            <TextBlock x:Name="RbAutoHint" Style="{StaticResource PanelHint}"
+                                       Text="строить, если шаг назад медленнее 250 мс" />
+
+                            <RadioButton x:Name="RbAlways" Style="{StaticResource CacheRadio}"
+                                         Content="Всегда — для любого открытого файла"
+                                         Checked="CacheMode_Checked" Tag="Always" />
+
+                            <RadioButton x:Name="RbNever" Style="{StaticResource CacheRadio}"
+                                         Content="Никогда — только прямой декод"
+                                         Checked="CacheMode_Checked" Tag="Never" />
+
+                            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,4,0,10" />
+
+                            <TextBlock Text="Ч А С Т О Т А   П Р О К С И" Style="{StaticResource PanelHeader}" />
+                            <WrapPanel x:Name="CacheFpsChips">
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="0"
+                                             Content="как в исходнике" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="60"
+                                             Content="60" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="50"
+                                             Content="50" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="30"
+                                             Content="30" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="25"
+                                             Content="25" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="24"
+                                             Content="24" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="15"
+                                             Content="15" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="12"
+                                             Content="12" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="10"
+                                             Content="10" Checked="CacheFps_Checked" />
+                                <RadioButton Style="{StaticResource ChipToggle}" GroupName="CacheFps" Tag="5"
+                                             Content="5" Checked="CacheFps_Checked" />
+                            </WrapPanel>
+                            <TextBlock x:Name="CacheFpsHint" Style="{StaticResource PanelHint}" Margin="0,1,0,4"
+                                       Text="ниже исходной — кэш меньше и собирается быстрее, но кадры прореживаются, а их номера становятся номерами прокси" />
+
+                            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,4,0,10" />
+
+                            <TextBlock x:Name="CacheFileHeader" Text="Т Р Е К   A"
+                                       Style="{StaticResource PanelHeader}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Режим" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="CacheFileMode" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Шаг назад" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="CacheFileStep" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Прокси" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="CacheFileProxy" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Собран" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="CacheFileBuilt" Style="{StaticResource PanelValue}" />
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button x:Name="BtnRebuild" Style="{StaticResource ToolButton}"
+                                        Content="Собрать заново" Click="CacheRebuild_Click" />
+                                <Button x:Name="BtnUseSource" Style="{StaticResource ToolButton}"
+                                        Content="Играть с исходника" Click="CacheUseSource_Click" />
                             </StackPanel>
-                        </ScrollViewer>
-                                    </Border>
-                    </Grid>
-                </fl:FlyleafHost>
+
+                            <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,10" />
+
+                            <TextBlock Text="Х Р А Н И Л И Щ Е" Style="{StaticResource PanelHeader}" />
+                            <TextBlock x:Name="CacheStorageText" FontFamily="{StaticResource MonoFont}" FontSize="12.5"
+                                       Foreground="{StaticResource TextBrush}" Margin="0,0,0,7" />
+                            <ProgressBar x:Name="CacheStorageBar" Style="{StaticResource CacheProgressBar}" Value="0" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button Style="{StaticResource ToolButton}" Content="Открыть папку" Click="CacheOpenFolder_Click" />
+                                <Button Style="{StaticResource ToolButton}" Content="Очистить всё" Click="CacheClear_Click" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
         </Grid>
 
-        <!-- Таймлайн фазы 2: панель управления и сам контрол (линейка, клип, playhead).
-             Он заменил собой шкалу позиции фазы 1 и полоску миниатюр фазы 4. -->
+        <!-- Таймлайн: панель управления и сам контрол (линейка, дорожки, playhead) -->
         <Grid Grid.Row="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -300,9 +402,26 @@
                     <Button x:Name="BtnZoomIn" Style="{StaticResource TimelineButton}" Content="+"
                             Click="ZoomIn_Click" ToolTip="Приблизить (+)" />
                     <Button x:Name="BtnFit" Style="{StaticResource TimelineButton}" Content="Уместить"
-                            Click="Fit_Click" ToolTip="Весь ролик в ширину окна (F)" />
+                            Click="Fit_Click" ToolTip="Вся шкала в ширину окна (F)" />
                     <Button x:Name="BtnSnap" Style="{StaticResource TimelineButton}" Content="Снэп"
-                            Click="Snap_Click" ToolTip="Притягивать playhead и ручки к границам (S)" />
+                            Click="Snap_Click" ToolTip="Притягивать playhead, ручки и клипы к границам (S)" />
+                    <Button x:Name="BtnMaster" Style="{StaticResource TimelineButton}" Content="Мастер: A"
+                            Click="Master_Click" ToolTip="Чьими кадрами меряется шаг — активный трек становится мастером (M)" />
+
+                    <!-- Сдвиг второго трека: перетаскивание клипа задаёт его грубо,
+                         это поле и Alt+стрелки — покадрово -->
+                    <TextBlock Text="сдвиг B" Margin="8,0,6,0" VerticalAlignment="Center"
+                               FontSize="12.5" Foreground="{StaticResource MutedBrush}" />
+                    <Button x:Name="BtnOffsetDown" Style="{StaticResource TimelineButton}" Content="−"
+                            Margin="0,0,4,0" Click="OffsetDown_Click" ToolTip="Сдвинуть B на кадр назад (Alt+←)" />
+                    <TextBox x:Name="TxtOffset" Style="{StaticResource SpeedBox}" Text="0" Width="62"
+                             Foreground="{StaticResource TrackBBrush}" CaretBrush="{StaticResource TrackBBrush}"
+                             KeyDown="Offset_KeyDown" LostFocus="Offset_LostFocus"
+                             ToolTip="Сдвиг трека B в кадрах мастера: введите число и нажмите Enter" />
+                    <Button x:Name="BtnOffsetUp" Style="{StaticResource TimelineButton}" Content="+"
+                            Margin="4,0,6,0" Click="OffsetUp_Click" ToolTip="Сдвинуть B на кадр вперёд (Alt+→)" />
+                    <Button x:Name="BtnOffsetReset" Style="{StaticResource TimelineButton}" Content="Сбросить сдвиг"
+                            Click="OffsetReset_Click" ToolTip="Совместить начала треков (Alt+0)" />
 
                     <TextBlock x:Name="TxtSegment" DockPanel.Dock="Right" VerticalAlignment="Center"
                                Margin="10,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="12.5"
@@ -312,7 +431,7 @@
                             ToolTip="Повторять отрезок при воспроизведении (L)" />
                     <Button x:Name="BtnSegReset" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
                             Content="Сбросить" Click="SegmentReset_Click"
-                            ToolTip="Отрезок на весь ролик (Shift+I)" />
+                            ToolTip="Отрезок активного трека на весь ролик (Shift+I)" />
                     <Button x:Name="BtnOut" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
                             Content="Конец отрезка" Click="SetOut_Click"
                             ToolTip="Конец отрезка на текущем кадре (O)" />
@@ -340,18 +459,23 @@
                        FontFamily="{StaticResource MonoFont}" FontSize="14"
                        Foreground="{StaticResource DimBrush}" />
 
-            <Border x:Name="FrameBadge" Margin="14,0,0,0" Padding="8,2" CornerRadius="4"
+            <Border x:Name="FrameBadgeA" Margin="14,0,0,0" Padding="8,2" CornerRadius="4"
                     BorderBrush="{StaticResource AccentDim}" BorderThickness="1" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtFrame" FontFamily="{StaticResource MonoFont}" FontSize="13"
+                <TextBlock x:Name="TxtFrameA" FontFamily="{StaticResource MonoFont}" FontSize="13"
                            Foreground="{StaticResource AccentBrush}" />
+            </Border>
+            <Border x:Name="FrameBadgeB" Margin="8,0,0,0" Padding="8,2" CornerRadius="4"
+                    BorderBrush="{StaticResource TrackBDim}" BorderThickness="1" VerticalAlignment="Center"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="TxtFrameB" FontFamily="{StaticResource MonoFont}" FontSize="13"
+                           Foreground="{StaticResource TrackBBrush}" />
             </Border>
 
             <Button x:Name="BtnStart" Style="{StaticResource ToolButton}" Content="В начало" Margin="16,0,0,0"
-                    Click="ToStart_Click" ToolTip="Начало отрезка (Home); Shift+Home — первый кадр ролика" />
+                    Click="ToStart_Click" ToolTip="Начало отрезка (Home); Shift+Home — начало шкалы" />
 
             <!-- Скорость воспроизведения: на шаг и seek не влияет, только на ход
-                 воспроизведения. Поле правится и вручную — набор готовых значений
-                 всё равно не покрыл бы «0,3×» для разбора быстрого движения. -->
+                 воспроизведения; задаётся обоим трекам одинаковой. -->
             <TextBlock Text="скорость" Margin="10,0,8,0" VerticalAlignment="Center"
                        FontSize="12.5" Foreground="{StaticResource MutedBrush}" />
             <Button x:Name="BtnSpeedDown" Style="{StaticResource TimelineButton}" Content="−"

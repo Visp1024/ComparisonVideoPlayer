@@ -15,9 +15,17 @@ public partial class App : Application
     /// <summary>Файл из командной строки: запуск через «Открыть с помощью» или из консоли.</summary>
     public static string? StartupFile { get; private set; }
 
+    /// <summary>
+    /// Второй файл из командной строки — открывается в трек B. Сравнение обычно
+    /// начинают сразу с пары роликов, и заставлять открывать второй вручную незачем.
+    /// </summary>
+    public static string? StartupFileB { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
-        StartupFile = e.Args.FirstOrDefault(a => !a.StartsWith('-'));
+        var files = e.Args.Where(a => !a.StartsWith('-')).ToList();
+        StartupFile = files.FirstOrDefault();
+        StartupFileB = files.Skip(1).FirstOrDefault();
         Settings = Settings.Load();
         Directory.CreateDirectory(AppEnv.DataDir);
 

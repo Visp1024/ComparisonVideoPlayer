@@ -182,6 +182,19 @@ public sealed class FlyleafBackend : IPlaybackBackend
         PositionChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Коррекция дрейфа: точный переход, не трогающий состояние воспроизведения.
+    /// В отличие от <see cref="SeekToFrame"/> паузу не ставит — ведомый трек
+    /// подтягивается на ходу.
+    /// </summary>
+    public void NudgeTo(TimeSpan position)
+    {
+        if (_media is null) return;
+
+        var ms = (int)Math.Clamp(position.TotalMilliseconds, 0, _media.Duration.TotalMilliseconds);
+        _player.SeekAccurate(ms);
+    }
+
     private VideoStream? SelectedVideoStream()
     {
         var streams = _player.Video.Streams;

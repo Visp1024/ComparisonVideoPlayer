@@ -18,6 +18,11 @@
         <SolidColorBrush x:Key="OkBrush"      Color="#56B98B" />
         <SolidColorBrush x:Key="VideoBrush"   Color="#05070B" />
 
+        <!-- Цвет второго трека (фаза 3): им подписаны его клип, ручки и счётчик кадров.
+             Оранжевый акцент остаётся за треком A и за общими органами транспорта. -->
+        <SolidColorBrush x:Key="TrackBBrush"   Color="#4EA3E0" />
+        <SolidColorBrush x:Key="TrackBDim"     Color="#245A80" />
+
         <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Courier New</FontFamily>
 
         <!-- Кнопка панели инструментов -->
@@ -197,6 +202,40 @@
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Вкладка трека в боковой панели (фаза 3): панели «Сведения» и «Кэш…»
+             описывают один файл, поэтому у них появился переключатель A / B -->
+        <Style x:Key="TrackTab" TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{StaticResource Panel2Brush}"
+                                BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                                CornerRadius="4" Padding="10,3">
+                            <ContentPresenter x:Name="Content" TextBlock.Foreground="{StaticResource MutedBrush}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource DimBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Content" Property="TextBlock.Foreground"
+                                        Value="{StaticResource AccentBrush}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
