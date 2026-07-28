@@ -1,0 +1,626 @@
+[
+  {
+    "file": "4k_h264_gop25.mp4",
+    "codec": "h264",
+    "Width": 3840,
+    "Height": 2160,
+    "fps": 30,
+    "frames": 900,
+    "hwAccel": true,
+    "openMs": 58.2639,
+    "stepForward": {
+      "Min": 0.4747,
+      "Median": 0.9023,
+      "Avg": 3.269933333333334,
+      "P95": 5.0594,
+      "Max": 64.8148,
+      "Timeouts": 0,
+      "Row": "0,5 | 0,9 | 3,3 | 5,1 | 64,8"
+    },
+    "stepBackward": {
+      "Min": 15.3511,
+      "Median": 67.5338,
+      "Avg": 71.52107666666667,
+      "P95": 118.9736,
+      "Max": 129.0462,
+      "Timeouts": 0,
+      "Row": "15,4 | 67,5 | 71,5 | 119,0 | 129,0"
+    },
+    "stepBackwardAcrossGop": {
+      "Min": 31.9467,
+      "Median": 32.1724,
+      "Avg": 32.36236666666667,
+      "P95": 32.968,
+      "Max": 32.968,
+      "Timeouts": 0,
+      "Row": "31,9 | 32,2 | 32,4 | 33,0 | 33,0"
+    },
+    "seek": [
+      {
+        "target": 0,
+        "method": "ShowFrame",
+        "ms": 10.9729,
+        "curMs": 0,
+        "actual": 0,
+        "delta": 0,
+        "mad": 12.624010416666666,
+        "madControl": 13.354592013888889
+      },
+      {
+        "target": 1,
+        "method": "ShowFrame",
+        "ms": 10.6824,
+        "curMs": 33.3333,
+        "actual": 1,
+        "delta": 0,
+        "mad": 12.626866319444444,
+        "madControl": 13.292491319444444
+      },
+      {
+        "target": 249,
+        "method": "ShowFrame",
+        "ms": 28.1254,
+        "curMs": 8300,
+        "actual": 249,
+        "delta": 0,
+        "mad": 12.65484375,
+        "madControl": 13.82615451388889
+      },
+      {
+        "target": 250,
+        "method": "ShowFrame",
+        "ms": 10.4248,
+        "curMs": 8333.3333,
+        "actual": 250,
+        "delta": 0,
+        "mad": 12.660807291666666,
+        "madControl": 13.730208333333334
+      },
+      {
+        "target": 251,
+        "method": "ShowFrame",
+        "ms": 11.9678,
+        "curMs": 8366.6666,
+        "actual": 251,
+        "delta": 0,
+        "mad": 12.662517361111112,
+        "madControl": 13.645299479166667
+      },
+      {
+        "target": 449,
+        "method": "ShowFrame",
+        "ms": 86.8644,
+        "curMs": 14966.6666,
+        "actual": 449,
+        "delta": 0,
+        "mad": 12.617890625,
+        "madControl": 13.589361979166666
+      },
+      {
+        "target": 700,
+        "method": "ShowFrame",
+        "ms": 11.4318,
+        "curMs": 23333.3333,
+        "actual": 700,
+        "delta": 0,
+        "mad": 10.901032986111112,
+        "madControl": 12.20697048611111
+      },
+      {
+        "target": 898,
+        "method": "ShowFrame",
+        "ms": 37.1112,
+        "curMs": 29933.3333,
+        "actual": 898,
+        "delta": 0,
+        "mad": 12.648697916666666,
+        "madControl": 13.654956597222222
+      },
+      {
+        "target": 0,
+        "method": "SeekAccurate",
+        "ms": 12.7623,
+        "curMs": 0,
+        "actual": 0,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 1,
+        "method": "SeekAccurate",
+        "ms": 32.6433,
+        "curMs": 33.3333,
+        "actual": 1,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 249,
+        "method": "SeekAccurate",
+        "ms": 870.6115,
+        "curMs": 8300,
+        "actual": 249,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 250,
+        "method": "SeekAccurate",
+        "ms": 528.8356,
+        "curMs": 8333.3333,
+        "actual": 250,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 251,
+        "method": "SeekAccurate",
+        "ms": 524.6175,
+        "curMs": 8366.6666,
+        "actual": 251,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 449,
+        "method": "SeekAccurate",
+        "ms": 514.7276,
+        "curMs": 14966.6666,
+        "actual": 449,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 700,
+        "method": "SeekAccurate",
+        "ms": 516.147,
+        "curMs": 23333.3333,
+        "actual": 700,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 898,
+        "method": "SeekAccurate",
+        "ms": 496.3432,
+        "curMs": 29933,
+        "actual": 898,
+        "delta": 0,
+        "mad": "NaN"
+      }
+    ]
+  },
+  {
+    "file": "4k_h264_gop250.mp4",
+    "codec": "h264",
+    "Width": 3840,
+    "Height": 2160,
+    "fps": 30,
+    "frames": 900,
+    "hwAccel": true,
+    "openMs": 24.203,
+    "stepForward": {
+      "Min": 0.4249,
+      "Median": 0.6335,
+      "Avg": 6.655343333333334,
+      "P95": 44.5452,
+      "Max": 116.4695,
+      "Timeouts": 0,
+      "Row": "0,4 | 0,6 | 6,7 | 44,5 | 116,5"
+    },
+    "stepBackward": {
+      "Min": 1047.3654,
+      "Median": 1111.6712,
+      "Avg": 1117.4096866666664,
+      "P95": 1185.471,
+      "Max": 1187.2096,
+      "Timeouts": 0,
+      "Row": "1047,4 | 1111,7 | 1117,4 | 1185,5 | 1187,2"
+    },
+    "stepBackwardAcrossGop": {
+      "Min": 1155.9461,
+      "Median": 1156.1936,
+      "Avg": 1156.8884333333333,
+      "P95": 1158.5256,
+      "Max": 1158.5256,
+      "Timeouts": 0,
+      "Row": "1155,9 | 1156,2 | 1156,9 | 1158,5 | 1158,5"
+    },
+    "seek": [
+      {
+        "target": 0,
+        "method": "ShowFrame",
+        "ms": 11.3044,
+        "curMs": 0,
+        "actual": 0,
+        "delta": 0,
+        "mad": 12.624010416666666,
+        "madControl": 13.354592013888889
+      },
+      {
+        "target": 1,
+        "method": "ShowFrame",
+        "ms": 12.5724,
+        "curMs": 33.3333,
+        "actual": 1,
+        "delta": 0,
+        "mad": 12.626866319444444,
+        "madControl": 13.292491319444444
+      },
+      {
+        "target": 249,
+        "method": "ShowFrame",
+        "ms": 1155.6351,
+        "curMs": 8300,
+        "actual": 249,
+        "delta": 0,
+        "mad": 12.65521267361111,
+        "madControl": 13.827447916666667
+      },
+      {
+        "target": 250,
+        "method": "ShowFrame",
+        "ms": 11.8487,
+        "curMs": 8333.3333,
+        "actual": 250,
+        "delta": 0,
+        "mad": 12.660807291666666,
+        "madControl": 13.730208333333334
+      },
+      {
+        "target": 251,
+        "method": "ShowFrame",
+        "ms": 15.7404,
+        "curMs": 8366.6666,
+        "actual": 251,
+        "delta": 0,
+        "mad": 12.662517361111112,
+        "madControl": 13.645299479166667
+      },
+      {
+        "target": 449,
+        "method": "ShowFrame",
+        "ms": 1319.9161,
+        "curMs": 14966.6666,
+        "actual": 449,
+        "delta": 0,
+        "mad": 12.620907118055555,
+        "madControl": 13.587799479166666
+      },
+      {
+        "target": 700,
+        "method": "ShowFrame",
+        "ms": 1432.9755,
+        "curMs": 23333.3333,
+        "actual": 700,
+        "delta": 0,
+        "mad": 10.900789930555556,
+        "madControl": 12.207395833333333
+      },
+      {
+        "target": 898,
+        "method": "ShowFrame",
+        "ms": 1220.9956,
+        "curMs": 29933.3333,
+        "actual": 898,
+        "delta": 0,
+        "mad": 12.651805555555555,
+        "madControl": 13.657625868055556
+      },
+      {
+        "target": 0,
+        "method": "SeekAccurate",
+        "ms": 17.8985,
+        "curMs": 0,
+        "actual": 0,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 1,
+        "method": "SeekAccurate",
+        "ms": 31.549,
+        "curMs": 33.3333,
+        "actual": 1,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 249,
+        "method": "SeekAccurate",
+        "ms": 1716.3691,
+        "curMs": 8300,
+        "actual": 249,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 250,
+        "method": "SeekAccurate",
+        "ms": 1266.9563,
+        "curMs": 8333.3333,
+        "actual": 250,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 251,
+        "method": "SeekAccurate",
+        "ms": 1276.491,
+        "curMs": 8366.6666,
+        "actual": 251,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 449,
+        "method": "SeekAccurate",
+        "ms": 1015.2765,
+        "curMs": 14966.6666,
+        "actual": 449,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 700,
+        "method": "SeekAccurate",
+        "ms": 1021.2763,
+        "curMs": 23333.3333,
+        "actual": 700,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 898,
+        "method": "SeekAccurate",
+        "ms": 751.4355,
+        "curMs": 29933,
+        "actual": 898,
+        "delta": 0,
+        "mad": "NaN"
+      }
+    ]
+  },
+  {
+    "file": "4k_hevc_gop250.mp4",
+    "codec": "hevc",
+    "Width": 3840,
+    "Height": 2160,
+    "fps": 30,
+    "frames": 900,
+    "hwAccel": true,
+    "openMs": 7.4143,
+    "stepForward": {
+      "Min": 0.6923,
+      "Median": 1.0257,
+      "Avg": 3.0594933333333336,
+      "P95": 7.0275,
+      "Max": 45.9055,
+      "Timeouts": 0,
+      "Row": "0,7 | 1,0 | 3,1 | 7,0 | 45,9"
+    },
+    "stepBackward": {
+      "Min": 436.6674,
+      "Median": 468.9361,
+      "Avg": 469.5850366666666,
+      "P95": 500.8152,
+      "Max": 510.4475,
+      "Timeouts": 0,
+      "Row": "436,7 | 468,9 | 469,6 | 500,8 | 510,4"
+    },
+    "stepBackwardAcrossGop": {
+      "Min": 486.1637,
+      "Median": 489.1872,
+      "Avg": 492.4005,
+      "P95": 501.8506,
+      "Max": 501.8506,
+      "Timeouts": 0,
+      "Row": "486,2 | 489,2 | 492,4 | 501,9 | 501,9"
+    },
+    "seek": [
+      {
+        "target": 0,
+        "method": "ShowFrame",
+        "ms": 2.153,
+        "curMs": 0,
+        "actual": 0,
+        "delta": 0,
+        "mad": 12.615477430555556,
+        "madControl": 13.356905381944445
+      },
+      {
+        "target": 1,
+        "method": "ShowFrame",
+        "ms": 6.2423,
+        "curMs": 33.3333,
+        "actual": 1,
+        "delta": 0,
+        "mad": 12.619735243055555,
+        "madControl": 13.276197916666666
+      },
+      {
+        "target": 249,
+        "method": "ShowFrame",
+        "ms": 482.6326,
+        "curMs": 8300,
+        "actual": 249,
+        "delta": 0,
+        "mad": 12.640421006944445,
+        "madControl": 13.803485243055556
+      },
+      {
+        "target": 250,
+        "method": "ShowFrame",
+        "ms": 496.4794,
+        "curMs": 8333.3333,
+        "actual": 250,
+        "delta": 0,
+        "mad": 12.662274305555556,
+        "madControl": 13.730967881944444
+      },
+      {
+        "target": 251,
+        "method": "ShowFrame",
+        "ms": 497.5648,
+        "curMs": 8366.6666,
+        "actual": 251,
+        "delta": 0,
+        "mad": 12.665386284722222,
+        "madControl": 13.640581597222223
+      },
+      {
+        "target": 449,
+        "method": "ShowFrame",
+        "ms": 394.1843,
+        "curMs": 14966.6666,
+        "actual": 449,
+        "delta": 0,
+        "mad": 12.58984375,
+        "madControl": 13.552808159722222
+      },
+      {
+        "target": 700,
+        "method": "ShowFrame",
+        "ms": 619.6762,
+        "curMs": 23333.3333,
+        "actual": 700,
+        "delta": 0,
+        "mad": 10.894431423611111,
+        "madControl": 12.196927083333334
+      },
+      {
+        "target": 898,
+        "method": "ShowFrame",
+        "ms": 559.2462,
+        "curMs": 29933.3333,
+        "actual": 898,
+        "delta": 0,
+        "mad": 12.620889756944445,
+        "madControl": 13.625112847222223
+      },
+      {
+        "target": 0,
+        "method": "SeekAccurate",
+        "ms": 1.4305,
+        "curMs": 29966.6666,
+        "actual": 899,
+        "delta": 899,
+        "mad": "NaN"
+      },
+      {
+        "target": 1,
+        "method": "SeekAccurate",
+        "ms": 24.1949,
+        "curMs": 33.3333,
+        "actual": 1,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 249,
+        "method": "SeekAccurate",
+        "ms": 536.8441,
+        "curMs": 8300,
+        "actual": 249,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 250,
+        "method": "SeekAccurate",
+        "ms": 530.5875,
+        "curMs": 8333.3333,
+        "actual": 250,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 251,
+        "method": "SeekAccurate",
+        "ms": 532.5988,
+        "curMs": 8366.6666,
+        "actual": 251,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 449,
+        "method": "SeekAccurate",
+        "ms": 426.4294,
+        "curMs": 14966.6666,
+        "actual": 449,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 700,
+        "method": "SeekAccurate",
+        "ms": 423.0601,
+        "curMs": 23333.3333,
+        "actual": 700,
+        "delta": 0,
+        "mad": "NaN"
+      },
+      {
+        "target": 898,
+        "method": "SeekAccurate",
+        "ms": 307.4678,
+        "curMs": 29933,
+        "actual": 898,
+        "delta": 0,
+        "mad": "NaN"
+      }
+    ]
+  },
+  {
+    "test": "dual",
+    "fileA": "4k_h264_gop25.mp4",
+    "fileB": "4k_hevc_gop250.mp4",
+    "forwardA": {
+      "Min": 0.8052,
+      "Median": 0.8809,
+      "Avg": 3.857055,
+      "P95": 16.2752,
+      "Max": 42.2146,
+      "Timeouts": 0,
+      "Row": "0,8 | 0,9 | 3,9 | 16,3 | 42,2"
+    },
+    "forwardB": {
+      "Min": 0.7132,
+      "Median": 0.8543,
+      "Avg": 0.9223850000000002,
+      "P95": 1.1312,
+      "Max": 1.6081,
+      "Timeouts": 0,
+      "Row": "0,7 | 0,9 | 0,9 | 1,1 | 1,6"
+    },
+    "backwardA": {
+      "Min": 13.677,
+      "Median": 18.8006,
+      "Avg": 21.154195,
+      "P95": 23.7205,
+      "Max": 68.1001,
+      "Timeouts": 0,
+      "Row": "13,7 | 18,8 | 21,2 | 23,7 | 68,1"
+    },
+    "backwardB": {
+      "Min": 427.5102,
+      "Median": 484.3128,
+      "Avg": 489.26503,
+      "P95": 545.285,
+      "Max": 550.2969,
+      "Timeouts": 0,
+      "Row": "427,5 | 484,3 | 489,3 | 545,3 | 550,3"
+    },
+    "cpuMs": 18437.5,
+    "wallMs": 10304.2797,
+    "ramMb": 837.08203125,
+    "playedA": 4933.3333,
+    "playedB": 4966.6666,
+    "driftMs": 33.333299999999326,
+    "fpsCurA": 0,
+    "fpsCurB": 0,
+    "droppedA": 0,
+    "droppedB": 0
+  }
+]
