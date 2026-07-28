@@ -1,8 +1,9 @@
-<Window x:Class="ComparisonPlayer.SettingsWindow"
+<chrome:AppWindow x:Class="ComparisonPlayer.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:chrome="clr-namespace:ComparisonPlayer.Chrome"
         Title="Настройки — ComparisonVideoPlayer" Icon="app.ico"
-        Height="740" Width="720" MinHeight="520" MinWidth="620"
+        Height="620" Width="800" MinHeight="480" MinWidth="700"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{StaticResource PanelBrush}"
         Foreground="{StaticResource TextBrush}"
@@ -10,9 +11,7 @@
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
 
     <Window.Resources>
-        <Style x:Key="SettingsCheck" TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-            <Setter Property="FontSize" Value="13.5" />
+        <Style x:Key="SettingsCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
             <Setter Property="Margin" Value="0,0,0,7" />
         </Style>
 
@@ -49,191 +48,234 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,0,10,6" />
         </Style>
+
+        <!-- Страница раздела: показана та, что выбрана слева -->
+        <Style x:Key="Page" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed" />
+        </Style>
     </Window.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="18,16,12,8">
-            <StackPanel Margin="0,0,8,0">
+        <!-- Свернуть и развернуть окну настроек ни к чему: его открывают, чтобы закрыть.
+             Тянуть за края оно при этом даёт — шпаргалка по клавишам длинная. -->
+        <chrome:TitleBar x:Name="Bar" Grid.Row="0" Caption="Настройки" ShowResizeButtons="False" />
 
-                <!-- Общие -->
-                <TextBlock Text="О Б Щ И Е" Style="{StaticResource SectionHeader}" />
-                <CheckBox x:Name="ChkRestore" Style="{StaticResource SettingsCheck}"
-                          Content="Восстанавливать последнюю сессию при запуске" />
-                <TextBlock Style="{StaticResource PanelHint}" Margin="20,-4,0,8"
-                           Text="файлы, сдвиг, отрезки и позиция. Ролики, открытые из командной строки, сильнее сессии." />
-                <CheckBox x:Name="ChkOverlay" Style="{StaticResource SettingsCheck}"
-                          Content="Таймкод и номер кадра поверх изображения (T)" />
-                <CheckBox x:Name="ChkSnap" Style="{StaticResource SettingsCheck}"
-                          Content="Притягивать playhead и ручки отрезка к границам (S)" />
-                <CheckBox x:Name="ChkLoop" Style="{StaticResource SettingsCheck}"
-                          Content="Повторять отрезок при воспроизведении (Ctrl+L)" />
-                <CheckBox x:Name="ChkAutoPlay" Style="{StaticResource SettingsCheck}"
-                          Content="Начинать воспроизведение сразу при открытии файла" />
-                <TextBlock Style="{StaticResource PanelHint}" Margin="20,-4,0,8"
-                           Text="Относится к открытию файла: из диалога, перетаскиванием и из командной строки. Восстановленная сессия остаётся на паузе — там возвращаются на прежний кадр." />
+        <!-- Задача #21: разделы слева, страница справа. Одним свитком окно вытягивалось
+             на пять экранов, и шпаргалка по клавишам в его конце фактически не читалась. -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-                <TextBlock Text="В И Д   П Р И   З А П У С К Е" Style="{StaticResource PanelHeader}" Margin="0,6,0,8" />
-                <RadioButton x:Name="RbStartRemembered" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
-                             Tag="Remembered" Content="Как в прошлый раз — вид из восстановленной сессии" />
-                <RadioButton x:Name="RbStartSide" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
-                             Tag="Side" Content="Рядом — оба кадра" />
-                <RadioButton x:Name="RbStartOnlyA" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
-                             Tag="OnlyA" Content="Только A — один кадр во всю ширину" />
-                <RadioButton x:Name="RbStartOnlyB" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
-                             Tag="OnlyB" Content="Только B — один кадр во всю ширину" />
-                <TextBlock Style="{StaticResource PanelHint}" Margin="0,2,0,4"
-                           Text="Вид переключается и на ходу клавишей V. Выбранный здесь вид сильнее сессии: он ставится после её восстановления." />
+            <Border Grid.Column="0" Width="186" Background="{StaticResource Panel2Brush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,1,0">
+                <StackPanel Margin="0,10,0,0">
+                    <RadioButton x:Name="NavGeneral" Style="{StaticResource NavItem}" GroupName="Nav"
+                                 Tag="general" Content="Общие" Checked="Nav_Checked" IsChecked="True" />
+                    <RadioButton x:Name="NavStartup" Style="{StaticResource NavItem}" GroupName="Nav"
+                                 Tag="startup" Content="Вид при запуске" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavStep" Style="{StaticResource NavItem}" GroupName="Nav"
+                                 Tag="step" Content="Шаг и промотка" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavCache" Style="{StaticResource NavItem}" GroupName="Nav"
+                                 Tag="cache" Content="Кэш кадров" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavPaths" Style="{StaticResource NavItem}" GroupName="Nav"
+                                 Tag="paths" Content="Пути" Checked="Nav_Checked" />
 
-                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,14" />
+                    <TextBlock Text="С П Р А В К А" Style="{StaticResource NavGroup}" />
+                    <RadioButton x:Name="NavKeys" Style="{StaticResource NavItem}" GroupName="Nav"
+                                 Tag="keys" Content="Клавиши" Checked="Nav_Checked" />
+                </StackPanel>
+            </Border>
 
-                <!-- Шаг, колесо, шаттл -->
-                <TextBlock Text="Ш А Г   И   П Р О М О Т К А" Style="{StaticResource SectionHeader}" />
+            <ScrollViewer Grid.Column="1" x:Name="PageScroll" VerticalScrollBarVisibility="Auto"
+                          Padding="18,16,12,12">
+                <Grid Margin="0,0,8,0">
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+                    <!-- Общие -->
+                    <StackPanel x:Name="PageGeneral" Style="{StaticResource Page}" Visibility="Visible">
+                        <TextBlock Text="О Б Щ И Е" Style="{StaticResource SectionHeader}" />
+                        <CheckBox x:Name="ChkRestore" Style="{StaticResource SettingsCheck}"
+                                  Content="Восстанавливать последнюю сессию при запуске" />
+                        <TextBlock Style="{StaticResource PanelHint}" Margin="24,-4,0,8"
+                                   Text="файлы, сдвиг, отрезки и позиция. Ролики, открытые из командной строки, сильнее сессии." />
+                        <CheckBox x:Name="ChkOverlay" Style="{StaticResource SettingsCheck}"
+                                  Content="Таймкод и номер кадра поверх изображения (T)" />
+                        <CheckBox x:Name="ChkSnap" Style="{StaticResource SettingsCheck}"
+                                  Content="Притягивать playhead и ручки отрезка к границам (S)" />
+                        <CheckBox x:Name="ChkLoop" Style="{StaticResource SettingsCheck}"
+                                  Content="Повторять отрезок при воспроизведении (Ctrl+L)" />
+                        <CheckBox x:Name="ChkAutoPlay" Style="{StaticResource SettingsCheck}"
+                                  Content="Начинать воспроизведение сразу при открытии файла" />
+                        <TextBlock Style="{StaticResource PanelHint}" Margin="24,-4,0,8"
+                                   Text="Относится к открытию файла: из диалога, перетаскиванием и из командной строки. Восстановленная сессия остаётся на паузе — там возвращаются на прежний кадр." />
+                    </StackPanel>
 
-                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}"
-                               Text="Крупный шаг (Shift + стрелка), кадров" />
-                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtBigStep" Style="{StaticResource SpeedBox}"
-                             Margin="0,0,0,8" />
+                    <!-- Вид при запуске -->
+                    <StackPanel x:Name="PageStartup" Style="{StaticResource Page}">
+                        <TextBlock Text="В И Д   П Р И   З А П У С К Е" Style="{StaticResource SectionHeader}" />
+                        <RadioButton x:Name="RbStartRemembered" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
+                                     Tag="Remembered" Content="Как в прошлый раз — вид из восстановленной сессии" />
+                        <RadioButton x:Name="RbStartSide" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
+                                     Tag="Side" Content="Рядом — оба кадра" />
+                        <RadioButton x:Name="RbStartOnlyA" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
+                                     Tag="OnlyA" Content="Только A — один кадр во всю ширину" />
+                        <RadioButton x:Name="RbStartOnlyB" Style="{StaticResource CacheRadio}" GroupName="StartupLayout"
+                                     Tag="OnlyB" Content="Только B — один кадр во всю ширину" />
+                        <TextBlock Style="{StaticResource PanelHint}" Margin="0,2,0,4"
+                                   Text="Вид переключается и на ходу клавишей V. Выбранный здесь вид сильнее сессии: он ставится после её восстановления." />
+                    </StackPanel>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}"
-                               Text="Крупный шаг быстрой прокрутки колесом, кадров" />
-                    <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtWheelFrames" Style="{StaticResource SpeedBox}"
-                             Margin="0,0,0,8" />
+                    <!-- Шаг, колесо, шаттл -->
+                    <StackPanel x:Name="PageStep" Style="{StaticResource Page}">
+                        <TextBlock Text="Ш А Г   И   П Р О М О Т К А" Style="{StaticResource SectionHeader}" />
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}"
-                               Text="Прокрутка считается быстрой, если щелчки чаще, мс" />
-                    <TextBox Grid.Row="2" Grid.Column="1" x:Name="TxtWheelMs" Style="{StaticResource SpeedBox}"
-                             Margin="0,0,0,8" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                                       Text="Крупный шаг (Shift + стрелка), кадров" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtBigStep" Style="{StaticResource SpeedBox}"
+                                     Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                                       Text="Крупный шаг быстрой прокрутки колесом, кадров" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtWheelFrames" Style="{StaticResource SpeedBox}"
+                                     Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                                       Text="Прокрутка считается быстрой, если щелчки чаще, мс" />
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="TxtWheelMs" Style="{StaticResource SpeedBox}"
+                                     Margin="0,0,0,8" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource PanelHint}" Margin="0,0,0,8"
+                                   Text="Колесо над кадром листает ролик: медленное вращение — по кадру, быстрое — сразу крупным шагом. Ctrl+колесо всегда покадрово, Shift+колесо — всегда крупно. Над таймлайном колесо меняет зум." />
+
+                        <CheckBox x:Name="ChkWheelInverted" Style="{StaticResource SettingsCheck}"
+                                  Content="Обратить направление прокрутки колесом" />
+
+                        <TextBlock Text="П Р Е Д Е Л   Ш А Т Т Л А   (J / L)" Style="{StaticResource PanelHeader}" Margin="0,10,0,8" />
+                        <WrapPanel x:Name="ShuttleChips">
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Shuttle" Tag="2" Content="2×" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Shuttle" Tag="4" Content="4×" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Shuttle" Tag="8" Content="8×" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Shuttle" Tag="16" Content="16×" />
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <!-- Кэш кадров -->
+                    <StackPanel x:Name="PageCache" Style="{StaticResource Page}">
+                        <TextBlock Text="К Э Ш   К А Д Р О В" Style="{StaticResource SectionHeader}" />
+
+                        <RadioButton x:Name="RbCacheAuto" Style="{StaticResource CacheRadio}" GroupName="CacheMode"
+                                     Tag="Auto" Content="Автоматически — по замеру шага назад" />
+                        <RadioButton x:Name="RbCacheAlways" Style="{StaticResource CacheRadio}" GroupName="CacheMode"
+                                     Tag="Always" Content="Всегда — для любого открытого файла" />
+                        <RadioButton x:Name="RbCacheNever" Style="{StaticResource CacheRadio}" GroupName="CacheMode"
+                                     Tag="Never" Content="Никогда — только прямой декод" />
+
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                                       Text="Порог: шаг назад медленнее этого — строим кэш, мс" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtThreshold" Style="{StaticResource SpeedBox}"
+                                     Margin="0,0,0,8" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}"
+                                       Text="Предел хранилища кэша, ГБ" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtCacheLimit" Style="{StaticResource SpeedBox}"
+                                     Margin="0,0,0,8" />
+                        </Grid>
+
+                        <TextBlock Text="Ч А С Т О Т А   П Р О К С И" Style="{StaticResource PanelHeader}" Margin="0,6,0,8" />
+                        <WrapPanel x:Name="CacheFpsChips">
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="0" Content="как в исходнике" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="60" Content="60" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="50" Content="50" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="30" Content="30" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="25" Content="25" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="24" Content="24" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="15" Content="15" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="12" Content="12" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="10" Content="10" />
+                            <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="5" Content="5" />
+                        </WrapPanel>
+                        <TextBlock Style="{StaticResource PanelHint}" Margin="0,0,0,4"
+                                   Text="Ниже исходной — кэш меньше и собирается быстрее, но кадры прореживаются, а их номера становятся номерами прокси." />
+                    </StackPanel>
+
+                    <!-- Пути -->
+                    <StackPanel x:Name="PagePaths" Style="{StaticResource Page}">
+                        <TextBlock Text="П У Т И" Style="{StaticResource SectionHeader}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Данные" Style="{StaticResource PanelKey}" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="PathData" Style="{StaticResource PathValue}" />
+                            <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource ToolButton}" Margin="0,0,0,6"
+                                    Content="Открыть" Tag="data" Click="OpenFolder_Click" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Кэш" Style="{StaticResource PanelKey}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="PathCache" Style="{StaticResource PathValue}" />
+                            <Button Grid.Row="1" Grid.Column="2" Style="{StaticResource ToolButton}" Margin="0,0,0,6"
+                                    Content="Открыть" Tag="cache" Click="OpenFolder_Click" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="FFmpeg" Style="{StaticResource PanelKey}" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="PathFFmpeg" Style="{StaticResource PathValue}" />
+                            <Button Grid.Row="2" Grid.Column="2" Style="{StaticResource ToolButton}" Margin="0,0,0,6"
+                                    Content="Открыть" Tag="ffmpeg" Click="OpenFolder_Click" />
+                        </Grid>
+                        <TextBlock Style="{StaticResource PanelHint}" Margin="0,2,0,4"
+                                   Text="Каталог FFmpeg задаётся переменной окружения COMPARISONPLAYER_FFMPEG_DIR либо подкаталогом FFmpeg рядом с программой." />
+                    </StackPanel>
+
+                    <!-- Клавиши -->
+                    <StackPanel x:Name="PageKeys" Style="{StaticResource Page}">
+                        <TextBlock Text="К Л А В И Ш И" Style="{StaticResource SectionHeader}" />
+                        <Grid x:Name="KeyGrid">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                        </Grid>
+                    </StackPanel>
                 </Grid>
+            </ScrollViewer>
+        </Grid>
 
-                <TextBlock Style="{StaticResource PanelHint}" Margin="0,0,0,8"
-                           Text="Колесо над кадром листает ролик: медленное вращение — по кадру, быстрое — сразу крупным шагом. Ctrl+колесо всегда покадрово, Shift+колесо — всегда крупно. Над таймлайном колесо меняет зум." />
-
-                <CheckBox x:Name="ChkWheelInverted" Style="{StaticResource SettingsCheck}"
-                          Content="Обратить направление прокрутки колесом" />
-
-                <TextBlock Text="П Р Е Д Е Л   Ш А Т Т Л А   (J / L)" Style="{StaticResource PanelHeader}" Margin="0,6,0,8" />
-                <WrapPanel x:Name="ShuttleChips">
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Shuttle" Tag="2" Content="2×" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Shuttle" Tag="4" Content="4×" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Shuttle" Tag="8" Content="8×" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Shuttle" Tag="16" Content="16×" />
-                </WrapPanel>
-
-                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,14" />
-
-                <!-- Кэш кадров -->
-                <TextBlock Text="К Э Ш   К А Д Р О В" Style="{StaticResource SectionHeader}" />
-
-                <RadioButton x:Name="RbCacheAuto" Style="{StaticResource CacheRadio}" GroupName="CacheMode"
-                             Tag="Auto" Content="Автоматически — по замеру шага назад" />
-                <RadioButton x:Name="RbCacheAlways" Style="{StaticResource CacheRadio}" GroupName="CacheMode"
-                             Tag="Always" Content="Всегда — для любого открытого файла" />
-                <RadioButton x:Name="RbCacheNever" Style="{StaticResource CacheRadio}" GroupName="CacheMode"
-                             Tag="Never" Content="Никогда — только прямой декод" />
-
-                <Grid Margin="0,6,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource FieldLabel}"
-                               Text="Порог: шаг назад медленнее этого — строим кэш, мс" />
-                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtThreshold" Style="{StaticResource SpeedBox}"
-                             Margin="0,0,0,8" />
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource FieldLabel}"
-                               Text="Предел хранилища кэша, ГБ" />
-                    <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtCacheLimit" Style="{StaticResource SpeedBox}"
-                             Margin="0,0,0,8" />
-                </Grid>
-
-                <TextBlock Text="Ч А С Т О Т А   П Р О К С И" Style="{StaticResource PanelHeader}" Margin="0,6,0,8" />
-                <WrapPanel x:Name="CacheFpsChips">
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="0" Content="как в исходнике" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="60" Content="60" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="50" Content="50" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="30" Content="30" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="25" Content="25" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="24" Content="24" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="15" Content="15" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="12" Content="12" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="10" Content="10" />
-                    <RadioButton Style="{StaticResource ChipToggle}" GroupName="Fps" Tag="5" Content="5" />
-                </WrapPanel>
-                <TextBlock Style="{StaticResource PanelHint}" Margin="0,0,0,4"
-                           Text="Ниже исходной — кэш меньше и собирается быстрее, но кадры прореживаются, а их номера становятся номерами прокси." />
-
-                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,14" />
-
-                <!-- Пути -->
-                <TextBlock Text="П У Т И" Style="{StaticResource SectionHeader}" />
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Данные" Style="{StaticResource PanelKey}" />
-                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="PathData" Style="{StaticResource PathValue}" />
-                    <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource ToolButton}" Margin="0,0,0,6"
-                            Content="Открыть" Tag="data" Click="OpenFolder_Click" />
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Кэш" Style="{StaticResource PanelKey}" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="PathCache" Style="{StaticResource PathValue}" />
-                    <Button Grid.Row="1" Grid.Column="2" Style="{StaticResource ToolButton}" Margin="0,0,0,6"
-                            Content="Открыть" Tag="cache" Click="OpenFolder_Click" />
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="FFmpeg" Style="{StaticResource PanelKey}" />
-                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="PathFFmpeg" Style="{StaticResource PathValue}" />
-                    <Button Grid.Row="2" Grid.Column="2" Style="{StaticResource ToolButton}" Margin="0,0,0,6"
-                            Content="Открыть" Tag="ffmpeg" Click="OpenFolder_Click" />
-                </Grid>
-                <TextBlock Style="{StaticResource PanelHint}" Margin="0,2,0,4"
-                           Text="Каталог FFmpeg задаётся переменной окружения COMPARISONPLAYER_FFMPEG_DIR либо подкаталогом FFmpeg рядом с программой." />
-
-                <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Margin="0,10,0,14" />
-
-                <!-- Клавиши -->
-                <TextBlock Text="К Л А В И Ш И" Style="{StaticResource SectionHeader}" />
-                <Grid x:Name="KeyGrid">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                </Grid>
-            </StackPanel>
-        </ScrollViewer>
-
-        <Border Grid.Row="1" Background="{StaticResource Panel2Brush}"
+        <Border Grid.Row="2" Background="{StaticResource Panel2Brush}"
                 BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="18,10">
             <DockPanel LastChildFill="False">
                 <Button DockPanel.Dock="Left" Style="{StaticResource ToolButton}"
@@ -245,4 +287,4 @@
             </DockPanel>
         </Border>
     </Grid>
-</Window>
+</chrome:AppWindow>

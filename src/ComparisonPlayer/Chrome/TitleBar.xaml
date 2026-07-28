@@ -1,0 +1,67 @@
+<UserControl x:Class="ComparisonPlayer.Chrome.TitleBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+             Height="30" Background="{StaticResource PanelBrush}">
+
+    <Border BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                        Margin="10,0,0,0">
+                <Image Source="/app.ico" Width="14" Height="14" VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <TextBlock x:Name="CaptionText" Margin="9,0,0,0" VerticalAlignment="Center"
+                           FontSize="12.5" Foreground="{StaticResource TextBrush}" />
+            </StackPanel>
+
+            <!-- Что открыто: имена файлов треков. Полоса — единственное место, где их видно,
+                 не наводя глаз на метки поверх кадра. Буква трека и разделитель появляются
+                 только вместе со своим файлом: у пустого трека они были бы шумом. -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="LetterA" Text="A" FontFamily="{StaticResource MonoFont}"
+                           FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
+                           Foreground="{StaticResource AccentBrush}" Visibility="Collapsed" />
+                <TextBlock x:Name="NameA" Margin="6,0,0,0" FontFamily="{StaticResource MonoFont}"
+                           FontSize="12" VerticalAlignment="Center" MaxWidth="260"
+                           TextTrimming="CharacterEllipsis" Foreground="{StaticResource MutedBrush}" />
+                <TextBlock x:Name="Divider" Text="·" Margin="10,0" FontSize="12"
+                           VerticalAlignment="Center" Foreground="{StaticResource DimBrush}"
+                           Visibility="Collapsed" />
+                <TextBlock x:Name="LetterB" Text="B" FontFamily="{StaticResource MonoFont}"
+                           FontWeight="Bold" FontSize="12" VerticalAlignment="Center"
+                           Foreground="{StaticResource TrackBBrush}" Visibility="Collapsed" />
+                <TextBlock x:Name="NameB" Margin="6,0,0,0" FontFamily="{StaticResource MonoFont}"
+                           FontSize="12" VerticalAlignment="Center" MaxWidth="260"
+                           TextTrimming="CharacterEllipsis" Foreground="{StaticResource MutedBrush}" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button x:Name="BtnMinimize" Style="{StaticResource WindowButton}"
+                        FontFamily="Segoe MDL2 Assets" FontSize="10" Content="&#xE921;"
+                        Command="{x:Static SystemCommands.MinimizeWindowCommand}"
+                        ToolTip="Свернуть" />
+                <Button x:Name="BtnMaximize" Style="{StaticResource WindowButton}"
+                        FontFamily="Segoe MDL2 Assets" FontSize="10" Content="&#xE922;"
+                        Command="{x:Static SystemCommands.MaximizeWindowCommand}"
+                        ToolTip="Развернуть" />
+                <Button x:Name="BtnRestore" Style="{StaticResource WindowButton}"
+                        FontFamily="Segoe MDL2 Assets" FontSize="10" Content="&#xE923;"
+                        Visibility="Collapsed"
+                        Command="{x:Static SystemCommands.RestoreWindowCommand}"
+                        ToolTip="Восстановить размер" />
+                <Button x:Name="BtnClose" Style="{StaticResource WindowCloseButton}"
+                        FontFamily="Segoe MDL2 Assets" FontSize="10" Content="&#xE8BB;"
+                        Command="{x:Static SystemCommands.CloseWindowCommand}"
+                        ToolTip="Закрыть" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

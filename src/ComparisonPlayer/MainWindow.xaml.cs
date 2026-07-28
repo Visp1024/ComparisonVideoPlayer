@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using ComparisonPlayer.Chrome;
 using ComparisonPlayer.Playback;
 using ComparisonPlayer.Timeline;
 using ComparisonPlayer.Tracks;
@@ -38,7 +39,7 @@ internal enum SideMode
 /// дорожками и общий транспорт. Всё воспроизведение идёт через <see cref="SyncEngine"/>:
 /// окно не командует плеерами напрямую, иначе треки разъезжались бы.
 /// </summary>
-public partial class MainWindow : Window
+public partial class MainWindow : AppWindow
 {
     /// <summary>Расширения, которые принимаем перетаскиванием и показываем в диалоге.</summary>
     private static readonly string[] VideoExtensions =
@@ -370,7 +371,7 @@ public partial class MainWindow : Window
             case Key.OemMinus or Key.Subtract: ZoomTimeline(1 / ZoomStep); return true;
 
             case Key.C: ToggleSide(SideMode.Cache); return true;
-            case Key.F1: OpenSettings(); return true;
+            case Key.F1: OpenSettings(SettingsWindow.KeysPage); return true;
             case Key.OemComma when ctrl: OpenSettings(); return true;
             default: return false;
         }
@@ -1139,10 +1140,11 @@ public partial class MainWindow : Window
     /// частота прокси), применяются теми же путями, что и переключатели панели «Кэш…»:
     /// одно решение — одна реализация.
     /// </summary>
-    private void OpenSettings()
+    /// <param name="page">Раздел, на котором открыть окно; F1 ведёт сразу на шпаргалку по клавишам.</param>
+    private void OpenSettings(string? page = null)
     {
         var before = App.Settings;
-        var dialog = new SettingsWindow(before) { Owner = this };
+        var dialog = new SettingsWindow(before, page) { Owner = this };
 
         if (dialog.ShowDialog() != true) return;
 
@@ -1367,6 +1369,8 @@ public partial class MainWindow : Window
             ? "ComparisonVideoPlayer — " + string.Join(" · ", _sync.OpenTracks.Select(t => $"{t.Letter}: {t.Media!.FileName}"))
             : "ComparisonVideoPlayer";
 
+        UpdateTitleBar();
+
         _syncingSideUi = true;
         TabA.IsChecked = _sideTrack == TrackId.A;
         TabB.IsChecked = _sideTrack == TrackId.B;
@@ -1386,6 +1390,11 @@ public partial class MainWindow : Window
         UpdateCachePanel();
         UpdatePosition();
     }
+
+    /// <summary>Что открыто — в титульную полосу (задача #21).</summary>
+    private void UpdateTitleBar() => Bar.ShowFiles(
+        _a.IsOpen ? _a.Media!.FileName : null, _a.IsOpen ? _a.Media!.FilePath : null,
+        _b.IsOpen ? _b.Media!.FileName : null, _b.IsOpen ? _b.Media!.FilePath : null);
 
     private void UpdateInfoPanel()
     {

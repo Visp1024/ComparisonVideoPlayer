@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using ComparisonPlayer.Chrome;
 
 namespace ComparisonPlayer;
 
@@ -11,8 +12,11 @@ namespace ComparisonPlayer;
 /// отмена должна отменять, а часть значений (режим кэша, частота прокси) меняет поведение
 /// открытых треков — применять их на каждый щелчок было бы неожиданно.
 /// </summary>
-public partial class SettingsWindow : Window
+public partial class SettingsWindow : AppWindow
 {
+    /// <summary>Раздел со шпаргалкой по клавишам: на него открывается окно по F1.</summary>
+    public const string KeysPage = "keys";
+
     /// <summary>Шпаргалка по клавишам: она же справка, отдельного окна помощи нет.</summary>
     private static readonly (string Keys, string What)[] Shortcuts =
     [
@@ -47,13 +51,19 @@ public partial class SettingsWindow : Window
     /// <summary>Правленая копия; забирать её имеет смысл только при <c>DialogResult == true</c>.</summary>
     public Settings Result { get; }
 
-    public SettingsWindow(Settings current)
+    /// <param name="page">
+    /// Раздел, на котором открыть окно (<see cref="KeysPage"/> и прочие теги навигации);
+    /// <c>null</c> — «Общие».
+    /// </param>
+    public SettingsWindow(Settings current, string? page = null)
     {
         InitializeComponent();
 
         Result = current.Clone();
         ShowValues(Result);
         FillShortcuts();
+
+        if (page is not null) ShowPage(page);
 
         PathData.Text = AppEnv.DataDir;
         PathData.ToolTip = AppEnv.DataDir;
@@ -151,28 +161,58 @@ public partial class SettingsWindow : Window
     private static double? ChipTag(RadioButton button) =>
         button.Tag is string tag && double.TryParse(tag, CultureInfo.InvariantCulture, out var value) ? value : null;
 
+    // ---------- разделы ----------
+
+    /// <summary>Показать раздел по тегу пункта навигации; неизвестный тег ничего не меняет.</summary>
+    public void ShowPage(string tag)
+    {
+        var item = NavItems().FirstOrDefault(x => (string?)x.Tag == tag);
+        if (item is not null) item.IsChecked = true;
+    }
+
+    private IEnumerable<RadioButton> NavItems() => [NavGeneral, NavStartup, NavStep, NavCache, NavPaths, NavKeys];
+
+    private void Nav_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string tag }) return;
+        if (PageGeneral is null) return;   // разметка ещё строится: IsChecked стоит прямо в XAML
+
+        PageGeneral.Visibility = Page(tag == "general");
+        PageStartup.Visibility = Page(tag == "startup");
+        PageStep.Visibility = Page(tag == "step");
+        PageCache.Visibility = Page(tag == "cache");
+        PagePaths.Visibility = Page(tag == "paths");
+        PageKeys.Visibility = Page(tag == KeysPage);
+
+        // Свиток свой у каждого раздела только на вид: контейнер один, и без этого
+        // новый раздел открывался бы прокрученным на позицию прежнего.
+        PageScroll.ScrollToTop();
+
+        static Visibility Page(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     // ---------- шпаргалка ----------
 
-    /// <summary>Разложить клавиши в две колонки: списком в один столбец окно вытянулось бы вдвое.</summary>
+    /// <summary>
+    /// Клавиши одним столбцом: у раздела теперь своя страница на всю высоту окна,
+    /// и разбивать список на две колонки, как в общем свитке, больше незачем.
+    /// </summary>
     private void FillShortcuts()
     {
-        var rows = (Shortcuts.Length + 1) / 2;
-        for (var i = 0; i < rows; i++) KeyGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
         for (var i = 0; i < Shortcuts.Length; i++)
         {
+            KeyGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
             var (keys, what) = Shortcuts[i];
-            var column = i < rows ? 0 : 2;
-            var row = i < rows ? i : i - rows;
 
             var key = new TextBlock { Text = keys, Style = (Style)FindResource("KeyCell") };
-            Grid.SetRow(key, row);
-            Grid.SetColumn(key, column);
+            Grid.SetRow(key, i);
+            Grid.SetColumn(key, 0);
             KeyGrid.Children.Add(key);
 
             var text = new TextBlock { Text = what, Style = (Style)FindResource("KeyText") };
-            Grid.SetRow(text, row);
-            Grid.SetColumn(text, column + 1);
+            Grid.SetRow(text, i);
+            Grid.SetColumn(text, 1);
             KeyGrid.Children.Add(text);
         }
     }
@@ -208,8 +248,8 @@ public partial class SettingsWindow : Window
 
         if (string.IsNullOrEmpty(path))
         {
-            MessageBox.Show(this, "Каталог FFmpeg не найден.", "Настройки",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageDialog.Show(this, "Настройки", "Каталог FFmpeg не найден.",
+                "COMPARISONPLAYER_FFMPEG_DIR либо подкаталог FFmpeg рядом с программой");
             return;
         }
 
@@ -220,8 +260,7 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Не открылся каталог:\n{path}\n\n{ex.Message}", "Настройки",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageDialog.Show(this, "Настройки", $"Не открылся каталог.\n\n{ex.Message}", path);
         }
     }
 }

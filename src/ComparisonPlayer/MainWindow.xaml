@@ -1,8 +1,9 @@
-<Window x:Class="ComparisonPlayer.MainWindow"
+<chrome:AppWindow x:Class="ComparisonPlayer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fl="clr-namespace:FlyleafLib.Controls.WPF;assembly=FlyleafLib"
         xmlns:tl="clr-namespace:ComparisonPlayer.Timeline"
+        xmlns:chrome="clr-namespace:ComparisonPlayer.Chrome"
         Title="ComparisonVideoPlayer" Icon="app.ico" Height="820" Width="1320"
         MinHeight="520" MinWidth="960"
         Background="{StaticResource PanelBrush}"
@@ -14,6 +15,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -21,8 +23,13 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- Своя титульная полоса (задача #21): родная шапка Windows светлая и спорит
+             с почти чёрным кадром. По центру — что открыто: сейчас это единственное
+             место, где имена файлов видны, не наводя глаз на метки поверх кадра. -->
+        <chrome:TitleBar x:Name="Bar" Grid.Row="0" Caption="ComparisonVideoPlayer" />
+
         <!-- Панель инструментов -->
-        <Border Grid.Row="0" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+        <Border Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1" Padding="12,8">
             <DockPanel LastChildFill="False">
                 <Button x:Name="BtnOpenA" Style="{StaticResource PrimaryButton}" Click="OpenA_Click"
                         ToolTip="Открыть файл в трек A (Ctrl+O)">
@@ -109,7 +116,7 @@
              Панели «Сведения» и «Кэш…» фаз 1 и 4 были накладками поверх кадра: при двух
              окнах вывода FlyleafLib накладка одного трека закрывала бы второй кадр,
              поэтому теперь это колонка сбоку. -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -417,7 +424,7 @@
         <!-- Таймлайн: панель управления и сам контрол (линейка, дорожки, playhead).
              В компактном виде (задача #18) вся эта область скрыта, вместо неё —
              подвал строкой ниже. -->
-        <Grid x:Name="TimelineArea" Grid.Row="2">
+        <Grid x:Name="TimelineArea" Grid.Row="3">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -483,7 +490,7 @@
         <!-- Компактный подвал (задача #18): полоса прогресса во всю ширину, под ней
              полоска инициализации кэша и ужатый транспорт. Заменяет собой и таймлайн,
              и полноразмерный транспорт, и строку сообщений. -->
-        <Border x:Name="CompactFooter" Grid.Row="3" Visibility="Collapsed"
+        <Border x:Name="CompactFooter" Grid.Row="4" Visibility="Collapsed"
                 BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="12,8,12,6">
             <StackPanel>
                 <tl:CompactBar x:Name="MiniBar" />
@@ -545,7 +552,7 @@
              WrapPanel, а не StackPanel: с появлением громкости (задача #20) содержимое
              перестало помещаться в окно наименьшей ширины, а обрезанный ползунок хуже
              перенесённого на вторую строку. -->
-        <WrapPanel x:Name="TransportRow" Grid.Row="4" Orientation="Horizontal" Margin="14,10,14,12"
+        <WrapPanel x:Name="TransportRow" Grid.Row="5" Orientation="Horizontal" Margin="14,10,14,12"
                    VerticalAlignment="Center">
             <Button x:Name="BtnShuttleBack" Style="{StaticResource TransportButton}" Content="◀◀"
                     Click="ShuttleBack_Click" ToolTip="Шаттл назад: повторное нажатие вдвое быстрее (J)" />
@@ -605,10 +612,10 @@
         </WrapPanel>
 
         <!-- Строка сообщений: в компактном виде скрыта вместе с таймлайном -->
-        <Border x:Name="StatusBar" Grid.Row="5" Background="{StaticResource Panel2Brush}"
+        <Border x:Name="StatusBar" Grid.Row="6" Background="{StaticResource Panel2Brush}"
                 BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="14,7">
             <TextBlock x:Name="TxtStatus" FontFamily="{StaticResource MonoFont}" FontSize="12"
                        Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />
         </Border>
     </Grid>
-</Window>
+</chrome:AppWindow>

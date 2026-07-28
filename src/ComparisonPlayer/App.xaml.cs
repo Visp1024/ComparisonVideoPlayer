@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using ComparisonPlayer.Chrome;
 using FlyleafLib;
 
 namespace ComparisonPlayer;
@@ -50,13 +51,17 @@ public partial class App : Application
             // Подсказку про FFmpeg показываем, только если каталог библиотек и правда негоден:
             // раньше она стояла в любом отказе и уводила от настоящей причины.
             var message = $"Не удалось запустить движок воспроизведения.\n\n{ex.Message}";
+            string? detail = null;
             if (!AppEnv.FFmpegLooksUsable)
+            {
                 message +=
-                    $"\n\nБиблиотеки FFmpeg ожидались в каталоге:\n{(string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "(не найден)" : AppEnv.FFmpegDir)}\n\n" +
-                    "Укажите каталог переменной окружения COMPARISONPLAYER_FFMPEG_DIR " +
-                    "или положите библиотеки в подкаталог FFmpeg рядом с программой.";
+                    "\n\nУкажите каталог библиотек FFmpeg переменной окружения COMPARISONPLAYER_FFMPEG_DIR " +
+                    "или положите их в подкаталог FFmpeg рядом с программой.";
+                detail = "Библиотеки ожидались в каталоге: " +
+                         (string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "(не найден)" : AppEnv.FFmpegDir);
+            }
 
-            MessageBox.Show(message, "ComparisonVideoPlayer", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageDialog.Show(null, "ComparisonVideoPlayer", message, detail);
             Shutdown(1);
             return;
         }
