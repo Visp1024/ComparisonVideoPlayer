@@ -63,53 +63,6 @@
 ## Установка
 
 Готовая поставка — на странице [релизов](https://github.com/Visp1024/ComparisonVideoPlayer/releases/latest),
-её собирает CI по тегу версии:
-
-- `CVP-<версия>-setup.exe` — инсталлятор (ставится и без прав администратора);
-- `CVP-<версия>-win-x64.zip` — переносимый вариант: распаковать и запустить.
-
-Требования к машине: **Windows x64**. Рантайм .NET ставить не нужно — поставка
-self-contained; FFmpeg тоже внутри.
-
-Плееру нужны нативные библиотеки FFmpeg (n7.1 win64 gpl shared) — в поставке они лежат
-в подкаталоге `FFmpeg` рядом с exe. Если их нет, при запуске плеер сам предложит скачать
-готовый комплект и положит его туда же; каталог можно задать и вручную — переменной
-окружения `COMPARISONPLAYER_FFMPEG_DIR`.
-
-## Сборка из исходников
-
-Нужен **.NET 9 SDK**; для инсталлятора дополнительно
-[Inno Setup 6](https://jrsoftware.org/isdl.php).
-
-```powershell
-tools/publish.ps1 -Zip            # publish/win-x64 плюс переносимый архив
-tools/make-installer.ps1          # то же плюс publish/installer/CVP-<версия>-setup.exe
-```
-
-Ключ `-FrameworkDependent` даёт сборку без рантайма внутри (тогда на машине нужен
-**.NET 9 Desktop Runtime**), `-Version` задаёт версию поставки. Библиотеки FFmpeg
-скрипт берёт из `tools/ffmpeg/bin`, `COMPARISONPLAYER_FFMPEG_DIR` или `C:\ffmpeg\bin`;
-без них соберётся только с ключом `-NoFFmpeg`.
-
-### CI
-
-Автоматически на push и pull request не запускается ничего — оба workflow
-стартуют по команде.
-
-- **Релиз** (`.github/workflows/release.yml`) — по тегу `v*`: скачивает FFmpeg,
-  собирает архив и инсталлятор и выкладывает их в релиз GitHub. Тег ставит
-  `tools/release.ps1`: он берёт версию из `<Version>` в csproj, проверяет, что
-  ветка чистая и совпадает с origin, и отправляет тег.
-
-  ```powershell
-  tools/release.ps1                 # версия из csproj
-  tools/release.ps1 -Version 1.1.0  # явная версия
-  ```
-
-  Ручной запуск workflow (workflow_dispatch) собирает то же самое в артефакты
-  прогона, не создавая релиза.
-- **Сборка** (`.github/workflows/build.yml`) — только по кнопке: компиляция в
-  Release и проверка публикации, без FFmpeg и упаковки.
 
 ## Известные ограничения
 
