@@ -79,78 +79,12 @@
             <Setter Property="BorderBrush" Value="{StaticResource AccentDim}" />
         </Style>
 
-        <!-- Шкала позиции: заполненная часть слева от playhead, playhead — узкая метка -->
-        <Style x:Key="TrackFill" TargetType="RepeatButton">
-            <Setter Property="Focusable" Value="False" />
-            <Setter Property="IsTabStop" Value="False" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="RepeatButton">
-                        <Border Background="{StaticResource AccentBrush}" CornerRadius="3" Height="6"
-                                VerticalAlignment="Center" />
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="TrackRest" TargetType="RepeatButton">
-            <Setter Property="Focusable" Value="False" />
-            <Setter Property="IsTabStop" Value="False" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="RepeatButton">
-                        <Border Background="Transparent" Height="6" VerticalAlignment="Center" />
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="Playhead" TargetType="Thumb">
-            <Setter Property="Focusable" Value="False" />
-            <Setter Property="Width" Value="3" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Thumb">
-                        <Grid>
-                            <Rectangle Width="11" Fill="Transparent" />
-                            <Rectangle Width="3" Height="18" RadiusX="1" RadiusY="1"
-                                       Fill="{StaticResource AccentBrush}" />
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ScrubSlider" TargetType="Slider">
-            <Setter Property="IsMoveToPointEnabled" Value="True" />
-            <Setter Property="Height" Value="18" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Slider">
-                        <Grid VerticalAlignment="Center">
-                            <Border Height="6" CornerRadius="3" VerticalAlignment="Center"
-                                    Background="{StaticResource Panel2Brush}"
-                                    BorderBrush="{StaticResource LineBrush}" BorderThickness="1" />
-                            <Track x:Name="PART_Track">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="Slider.DecreaseLarge" Style="{StaticResource TrackFill}" />
-                                </Track.DecreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb Style="{StaticResource Playhead}" />
-                                </Track.Thumb>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="Slider.IncreaseLarge" Style="{StaticResource TrackRest}" />
-                                </Track.IncreaseRepeatButton>
-                            </Track>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.4" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+        <!-- Кнопка панели таймлайна: тот же вид, что и у кнопок инструментов, но мельче —
+             их там десяток, и в полный размер строка перестаёт читаться -->
+        <Style x:Key="TimelineButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Padding" Value="9,3" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="FontSize" Value="12.5" />
         </Style>
 
         <!-- Текстовые роли боковой панели «Сведения» -->
@@ -234,17 +168,50 @@
             </Setter>
         </Style>
 
+        <!-- Поле скорости: системный TextBox в тёмной палитре выглядит белым пятном -->
+        <Style x:Key="SpeedBox" TargetType="TextBox">
+            <Setter Property="Width" Value="52" />
+            <Setter Property="Background" Value="{StaticResource Panel2Brush}" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="SelectionBrush" Value="{StaticResource AccentDim}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource DimBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="PanelHint" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Margin" Value="20,0,0,5" />
             <Setter Property="TextWrapping" Value="Wrap" />
-        </Style>
-
-        <Style x:Key="TickLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource DimBrush}" />
-            <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
-            <Setter Property="FontSize" Value="10.5" />
         </Style>
 
     </Application.Resources>

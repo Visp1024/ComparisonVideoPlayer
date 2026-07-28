@@ -182,11 +182,6 @@
       repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 6px, transparent 6px 12px),
       var(--panel-2);
   }
-  .clip .name {
-    position: absolute; left: 8px; top: 5px; font-size: 11.5px; font-family: var(--mono);
-    color: #dbe0ec; background: rgba(5,7,11,.6); padding: 1px 6px; border-radius: 3px;
-  }
-
   /* затемнение вне отрезка in/out */
   .outside {
     position: absolute; top: 0; bottom: 0; background: rgba(5,7,11,.62);
@@ -370,7 +365,6 @@
               <div class="th" style="background:linear-gradient(135deg,#1e2534,#313b54)"></div>
               <div class="th" style="background:linear-gradient(135deg,#212838,#353f59)"></div>
               <div class="th" style="background:linear-gradient(135deg,#1b2233,#2b3550)"></div>
-              <div class="name">4k_h264_gop250.mp4 · 30 fps · 900 кадров</div>
             </div>
 
             <div class="outside" style="left:0; width:13.3%"></div>
@@ -394,6 +388,11 @@
         <span class="dur">/ 00:00:30.000</span>
         <span class="badge">кадр 412 / 899</span>
         <button class="btn" style="margin-left:14px">В начало</button>
+
+        <span style="margin-left:10px;font-size:12.5px;color:var(--muted)">скорость</span>
+        <button class="btn sm" style="margin-left:8px">−</button>
+        <span class="btn sm" style="margin:0 4px;color:var(--accent);font-family:var(--mono)">1</span>
+        <button class="btn sm">+</button>
       </div>
 
       <div class="status">отрезок 00:04.000 – 00:21.500 (525 кадров) · петля выключена (L)</div>
@@ -414,8 +413,9 @@
   <section>
     <h2>2. Зум и панорамирование</h2>
     <p>Колесо мыши меняет масштаб, <b>точка под курсором остаётся на месте</b> — как в
-       Premiere и Resolve. Средняя кнопка или <kbd>Space</kbd>+перетаскивание двигают
-       видимое окно; <kbd>Shift</kbd>+колесо — горизонтальная прокрутка.</p>
+       Premiere и Resolve. Видимое окно двигают средняя кнопка мыши и
+       <kbd>Shift</kbd>+колесо (<kbd>Space</kbd> в этом плеере занят воспроизведением,
+       поэтому привычного по редакторам «Space+перетаскивание» здесь нет).</p>
 
     <div class="cols">
       <div class="variant">
@@ -734,7 +734,7 @@
               кадр декодируется по отпусканию</td></tr>
       <tr><td>колесо</td><td>зум к точке под курсором</td></tr>
       <tr><td><kbd>Shift</kbd>+колесо</td><td>прокрутка по времени</td></tr>
-      <tr><td>средняя кнопка / <kbd>Space</kbd>+перетаскивание</td><td>панорамирование</td></tr>
+      <tr><td>средняя кнопка мыши</td><td>панорамирование</td></tr>
       <tr><td>перетаскивание ручки in/out</td><td>граница отрезка, со снэпом; ручки не проходят друг сквозь друга</td></tr>
       <tr><td>двойной щелчок по клипу</td><td>отрезок = весь клип (сброс in/out)</td></tr>
     </table>
@@ -818,7 +818,8 @@
       <tr><td>Шкала позиции</td><td>Slider с делениями</td><td>убрана — её роль берёт таймлайн</td></tr>
       <tr><td>Полоска миниатюр</td><td>отдельная под шкалой</td><td>внутри клипа, режется его границами</td></tr>
       <tr><td>Полоса «докуда собран кэш»</td><td>тонкая полоса под шкалой</td><td>нижняя кромка клипа</td></tr>
-      <tr><td>Транспорт</td><td>шаг, play, таймкод, номер кадра</td><td>без изменений</td></tr>
+      <tr><td>Транспорт</td><td>шаг, play, таймкод, номер кадра</td>
+          <td>+ поле скорости воспроизведения с кнопками «−»/«+» (шаг 0,25×)</td></tr>
       <tr><td>Строка сообщений</td><td>сообщения плеера и кэша</td><td>+ отрезок и петля</td></tr>
     </table>
   </section>

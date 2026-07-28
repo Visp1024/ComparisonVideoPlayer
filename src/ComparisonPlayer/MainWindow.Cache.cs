@@ -68,17 +68,13 @@ public partial class MainWindow
     /// <summary>Переключатели режима расставляет код — реагировать на это не нужно.</summary>
     private bool _syncingCacheUi;
 
-    /// <summary>Playhead ведут по полоске миниатюр.</summary>
-    private bool _thumbDragging;
-
-    /// <summary>Все собранные миниатюры файла; в полоску попадает выборка по ширине.</summary>
+    /// <summary>Все снятые миниатюры файла; таймлайн берёт из них ту, что нужна клетке клипа.</summary>
     private IReadOnlyList<string> _thumbFiles = [];
 
-    /// <summary>Сколько клеток сейчас в полоске и из скольких файлов они выбраны.</summary>
-    private int _thumbShown;
-    private int _thumbSource;
+    /// <summary>Шаг между миниатюрами по времени, секунд; 0 — плана нет.</summary>
+    private double _thumbInterval;
 
-    /// <summary>Раскладку пересчитываем при каждом изменении ширины — картинки декодируем один раз.</summary>
+    /// <summary>Картинку декодируем один раз: клип перерисовывается на каждый зум и шаг.</summary>
     private readonly Dictionary<string, ImageSource> _thumbCache = [];
 
     private long CacheLimitBytes => (long)(App.Settings.CacheLimitGb * 1024 * 1024 * 1024);
@@ -242,11 +238,10 @@ public partial class MainWindow
     {
         _buildPercent = progress.Percent;
 
-        // Ход сборки показывает одна полоса под шкалой — она же говорит, докуда
-        // кэш уже готов. Проценты и оставшееся время идут в индикатор режима.
+        // Ход сборки показывает нижняя кромка клипа на таймлайне — она же говорит,
+        // докуда кэш уже готов. Проценты и оставшееся время идут в индикатор режима.
         _builtFraction = Math.Clamp(progress.Percent / 100.0, 0, 1);
-        BuiltLine.Visibility = Visibility.Visible;
-        BuiltFill.Width = BuiltLine.ActualWidth * _builtFraction;
+        Timeline.BuiltFraction = _builtFraction;
 
         _buildEta = progress.Eta > TimeSpan.Zero ? Eta(progress.Eta) : "";
 
@@ -481,6 +476,7 @@ public partial class MainWindow
         if (!entry.Partial)
         {
             _builtFraction = 1;
+            Timeline.BuiltFraction = 1;
             ShowThumbnails(entry.ThumbnailFiles());
         }
         UpdateState();
@@ -679,8 +675,8 @@ public partial class MainWindow
     // ---------- индикаторы ----------
 
     /// <summary>
-    /// Признаки идущей сборки: кнопка отмены рядом с индикатором режима и полоса
-    /// готовности под шкалой. Отдельной строки прогресса нет — она дублировала полосу.
+    /// Признаки идущей сборки: кнопка отмены рядом с индикатором режима и зелёная
+    /// кромка клипа. Отдельной строки прогресса нет — она дублировала кромку.
     /// </summary>
     private void ShowBuildBar(bool visible)
     {
@@ -690,8 +686,10 @@ public partial class MainWindow
 
         _buildEta = "";
         ModeBadge.ToolTip = null;
-        BuiltLine.Visibility = Visibility.Collapsed;
-        BuiltFill.Width = 0;
+
+        // Собранный целиком кэш кромкой не отмечается: она отвечает на вопрос
+        // «докуда уже быстро», а на готовом кэше быстро везде.
+        Timeline.BuiltFraction = _builtFraction >= 1 ? 1 : 0;
     }
 
     private void UpdateModeBadge()
@@ -789,89 +787,45 @@ public partial class MainWindow
     // ---------- миниатюры ----------
 
     /// <summary>
-    /// Показать полоску с теми миниатюрами, что уже сняты. Пустой список — это тоже
-    /// полоска: во время сборки она видна сразу и заполняется слева направо.
+    /// Отдать таймлайну те миниатюры, что уже сняты. Пустой список — тоже состояние:
+    /// клип рисуется штриховкой и заполняется кадрами по мере сборки.
     /// </summary>
     private void ShowThumbnails(IReadOnlyList<string> files)
     {
         _thumbFiles = files;
-        LayoutThumbnails();
+
+        if (_backend.Media is { } media && media.Duration > TimeSpan.Zero)
+        {
+            var (planned, interval) = ProxyCacheBuilder.ThumbnailPlan(media.Duration, media.FrameCount);
+            _thumbInterval = planned > 0 ? interval : 0;
+        }
+
+        Timeline.HasThumbnails = files.Count > 0 || _buildCts is not null;
+        Timeline.InvalidateVisual();
     }
 
     /// <summary>
-    /// Раскладка полоски: клетки покрывают весь ролик, и каждая показывает кадр
-    /// своего места на шкале времени. Пока кэш собирается, кадры есть только слева —
-    /// правые клетки остаются пустыми и заполняются по мере сборки.
+    /// Миниатюра для момента ролика: клетка клипа спрашивает кадр своего места на шкале.
+    /// null — кадр ещё не снят (сборка досюда не дошла), и клетка остаётся заштрихованной.
     /// </summary>
-    private void LayoutThumbnails()
+    private ImageSource? ThumbnailAt(TimeSpan time)
     {
-        if (_backend.Media is not { } media || media.Duration <= TimeSpan.Zero || _thumbFiles.Count == 0)
-        {
-            ThumbStrip.Children.Clear();
-            ThumbStripBox.Width = 0;
-            _thumbShown = 0;
-            _thumbSource = 0;
+        if (_thumbFiles.Count == 0 || _thumbInterval <= 0) return null;
 
-            // Во время сборки место под полоску уже занято: она вот-вот появится.
-            ThumbStripArea.Visibility = _buildCts is not null ? Visibility.Visible : Visibility.Collapsed;
-            return;
-        }
+        var index = (int)(time.TotalSeconds / _thumbInterval);
+        if (index < 0 || index >= _thumbFiles.Count) return null;
 
-        ThumbStripArea.Visibility = Visibility.Visible;
-
-        var (planned, interval) = ProxyCacheBuilder.ThumbnailPlan(media.Duration, media.FrameCount);
-        if (planned == 0 || interval <= 0) return;
-
-        // Полоска кончается там же, где зелёная полоса готовности: её ширина и есть
-        // ответ на вопрос «сколько ролика уже в кэше».
-        var full = ThumbStripArea.ActualWidth;
-        var covered = Math.Clamp(_builtFraction, 0, 1);
-        var width = Math.Floor(full * covered);
-        ThumbStripBox.Width = width;
-
-        var height = ThumbStripArea.ActualHeight > 2 ? ThumbStripArea.ActualHeight - 2 : 44;
-        var aspect = media.Height > 0 ? media.Width / (double)media.Height : 16 / 9.0;
-        var cellWidth = Math.Max(height * aspect, 1);
-
-        var cells = Math.Max((int)Math.Round(width / cellWidth), 1);
-
-        // Ни ширина, ни набор файлов не изменились — перекладывать нечего.
-        if (cells == _thumbShown && _thumbFiles.Count == _thumbSource) return;
-        _thumbShown = cells;
-        _thumbSource = _thumbFiles.Count;
-
-        ThumbStrip.Columns = cells;
-        ThumbStrip.Children.Clear();
-
-        for (var i = 0; i < cells; i++)
-        {
-            // Время середины клетки в пределах собранной части → снятый там кадр.
-            var time = (i + 0.5) / cells * covered * media.Duration.TotalSeconds;
-            var index = Math.Clamp((int)(time / interval), 0, Math.Min(planned, _thumbFiles.Count) - 1);
-
-            var source = index >= 0 && index < _thumbFiles.Count ? LoadThumbnail(_thumbFiles[index]) : null;
-            if (source is null) continue;
-
-            ThumbStrip.Children.Add(new Image
-            {
-                Source = source,
-                Stretch = Stretch.UniformToFill,
-                Margin = new Thickness(0, 0, 1, 0)
-            });
-        }
-
-        UpdateThumbHead();
+        return LoadThumbnail(_thumbFiles[index]);
     }
 
     private void ClearThumbnails()
     {
         _thumbFiles = [];
-        _thumbShown = 0;
-        _thumbSource = 0;
+        _thumbInterval = 0;
         _thumbCache.Clear();
-        ThumbStrip.Children.Clear();
-        ThumbStripBox.Width = 0;
-        ThumbStripArea.Visibility = Visibility.Collapsed;
+
+        Timeline.HasThumbnails = false;
+        Timeline.InvalidateVisual();
     }
 
     /// <summary>
@@ -900,71 +854,6 @@ public partial class MainWindow
             // Файл ещё дописывается ffmpeg'ом — покажем его на следующем обновлении.
             return null;
         }
-    }
-
-    private void UpdateThumbHead()
-    {
-        if (ThumbStripArea.Visibility != Visibility.Visible) return;
-        if (_backend.Media is not { } media || media.FrameCount <= 1) return;
-
-        SetThumbHead(_backend.FrameIndex / (double)(media.FrameCount - 1));
-    }
-
-    private void SetThumbHead(double ratio)
-    {
-        var offset = Math.Clamp(ratio, 0, 1) * Math.Max(ThumbStripArea.ActualWidth - ThumbHead.Width, 0);
-        ThumbHead.Margin = new Thickness(offset, 0, 0, 0);
-    }
-
-    private void ThumbStrip_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        LayoutThumbnails();
-        UpdateThumbHead();
-    }
-
-    /// <summary>По полоске миниатюр можно и щёлкать, и вести playhead перетаскиванием.</summary>
-    private void ThumbStrip_MouseDown(object sender, MouseButtonEventArgs e)
-    {
-        ThumbStripArea.CaptureMouse();
-        _thumbDragging = true;
-        SeekToStripPoint(e.GetPosition(ThumbStripArea).X);
-    }
-
-    private void ThumbStrip_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (!_thumbDragging || e.LeftButton != MouseButtonState.Pressed) return;
-        SeekToStripPoint(e.GetPosition(ThumbStripArea).X);
-    }
-
-    private void ThumbStrip_MouseUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_thumbDragging) return;
-
-        _thumbDragging = false;
-        ThumbStripArea.ReleaseMouseCapture();
-
-        // На медленном источнике во время перетаскивания кадр не декодировался —
-        // показываем его теперь, по отпусканию кнопки.
-        if (!LiveScrub) SeekToStripPoint(e.GetPosition(ThumbStripArea).X, force: true);
-    }
-
-    private void SeekToStripPoint(double x, bool force = false)
-    {
-        if (_backend.Media is not { } media || ThumbStripArea.ActualWidth <= 0) return;
-
-        var ratio = Math.Clamp(x / ThumbStripArea.ActualWidth, 0, 1);
-        var frame = (long)Math.Round(ratio * Math.Max(media.FrameCount - 1, 0));
-
-
-        if (force || LiveScrub)
-        {
-            ScrubToFrame(frame);
-            return;
-        }
-
-        // Медленный источник: кадр не декодируем, но цель показываем — и подписями, и playhead'ом.
-        ShowFrameLabels(frame);
-        SetThumbHead(ratio);
     }
 
     // ---------- форматирование ----------

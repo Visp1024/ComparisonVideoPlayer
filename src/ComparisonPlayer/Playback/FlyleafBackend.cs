@@ -39,6 +39,12 @@ public sealed class FlyleafBackend : IPlaybackBackend
 
     public long FrameIndex => _media?.FrameAt(Position) ?? 0;
 
+    public double Speed
+    {
+        get => _player.Speed;
+        set => _player.Speed = Math.Clamp(value, 0.05, 16);
+    }
+
     public event EventHandler? PositionChanged;
     public event EventHandler? StateChanged;
 
@@ -49,6 +55,12 @@ public sealed class FlyleafBackend : IPlaybackBackend
         cfg.Player.SeekAccurate = true;      // покадровая точность seek — требование проекта
         cfg.Audio.Enabled = false;           // фаза 1 без звука, решение по аудио — фаза 3
         cfg.Video.VideoAcceleration = true;  // аппаратный декод D3D11
+
+        // Плавный playhead: по умолчанию FlyleafLib отдаёт CurTime раз в секунду,
+        // и на таймлайне это выглядело как рывок раз в секунду вместо хода по кадрам.
+        // PerFrame — обновление на каждый показанный кадр, ровно то, что нужно
+        // покадровому инструменту.
+        cfg.Player.UICurTime = UIRefreshType.PerFrame;
 
         // Свои горячие клавиши FlyleafLib перехватывает раньше окна и помечает
         // событие обработанным — из-за этого до плеера не доходили клавиши

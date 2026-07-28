@@ -29,6 +29,12 @@ public interface IPlaybackBackend : IDisposable
     /// <summary>Номер текущего кадра, отсчёт с нуля. При VFR — производная от позиции величина.</summary>
     long FrameIndex { get; }
 
+    /// <summary>
+    /// Скорость воспроизведения, 1 — обычная. На шаг и seek не влияет: покадровая
+    /// работа всегда идёт по кадрам, скорость меняет только ход воспроизведения.
+    /// </summary>
+    double Speed { get; set; }
+
     /// <summary>Позиция сменилась: шаг, seek или ход воспроизведения.</summary>
     event EventHandler? PositionChanged;
 

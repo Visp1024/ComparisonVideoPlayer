@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fl="clr-namespace:FlyleafLib.Controls.WPF;assembly=FlyleafLib"
+        xmlns:tl="clr-namespace:ComparisonPlayer.Timeline"
         Title="ComparisonVideoPlayer" Height="760" Width="1240"
         MinHeight="480" MinWidth="900"
         Background="{StaticResource PanelBrush}"
@@ -32,7 +33,7 @@
                 </Button>
                 <Button x:Name="BtnClose" Style="{StaticResource ToolButton}" Content="Закрыть" Click="Close_Click" />
                 <Button x:Name="BtnInfo" Style="{StaticResource ToolButton}" Content="Сведения" Click="Info_Click"
-                        ToolTip="Сведения о файле поверх кадра (I)" />
+                        ToolTip="Сведения о файле поверх кадра (Ctrl+I)" />
 
                 <!-- Кэш кадров: индикатор режима и панель управления -->
                 <Button x:Name="BtnCache" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
@@ -114,7 +115,7 @@
                                                Margin="0" VerticalAlignment="Center" />
                                     <Button Content="✕" Click="Info_Click" Style="{StaticResource ToolButton}"
                                             HorizontalAlignment="Right" Margin="0" Padding="7,1" FontSize="11"
-                                            ToolTip="Свернуть (I)" />
+                                            ToolTip="Свернуть (Ctrl+I)" />
                                 </Grid>
 
                                 <Grid>
@@ -280,64 +281,48 @@
             </Border>
         </Grid>
 
-        <!-- Шкала позиции, под ней — собранная часть кэша и полоска миниатюр -->
-        <Grid Grid.Row="2" Margin="14,12,14,0">
+        <!-- Таймлайн фазы 2: панель управления и сам контрол (линейка, клип, playhead).
+             Он заменил собой шкалу позиции фазы 1 и полоску миниатюр фазы 4. -->
+        <Grid Grid.Row="2">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Slider x:Name="Scrub" Grid.Row="0" Style="{StaticResource ScrubSlider}"
-                    Minimum="0" Maximum="1" Value="0" IsEnabled="False"
-                    ValueChanged="Scrub_ValueChanged"
-                    PreviewMouseLeftButtonDown="Scrub_MouseDown"
-                    PreviewMouseLeftButtonUp="Scrub_MouseUp" />
+            <Border Grid.Row="0" Background="{StaticResource Panel2Brush}"
+                    BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1" Padding="12,6">
+                <DockPanel LastChildFill="False">
+                    <Button x:Name="BtnZoomOut" Style="{StaticResource TimelineButton}" Content="−"
+                            Click="ZoomOut_Click" ToolTip="Отдалить (−)" />
+                    <TextBlock x:Name="TxtZoom" VerticalAlignment="Center" Margin="0,0,6,0"
+                               FontFamily="{StaticResource MonoFont}" FontSize="12.5"
+                               Foreground="{StaticResource MutedBrush}" MinWidth="76" />
+                    <Button x:Name="BtnZoomIn" Style="{StaticResource TimelineButton}" Content="+"
+                            Click="ZoomIn_Click" ToolTip="Приблизить (+)" />
+                    <Button x:Name="BtnFit" Style="{StaticResource TimelineButton}" Content="Уместить"
+                            Click="Fit_Click" ToolTip="Весь ролик в ширину окна (F)" />
+                    <Button x:Name="BtnSnap" Style="{StaticResource TimelineButton}" Content="Снэп"
+                            Click="Snap_Click" ToolTip="Притягивать playhead и ручки к границам (S)" />
 
-            <!-- Докуда собран кэш: отдельная тонкая полоса, чтобы не смешивать
-                 два смысла на самой шкале позиции. Видна только во время сборки. -->
-            <Border x:Name="BuiltLine" Grid.Row="1" Height="4" Margin="0,3,0,0" CornerRadius="2"
-                    Background="{StaticResource Panel2Brush}" Visibility="Collapsed"
-                    HorizontalAlignment="Stretch" ToolTip="Докуда собран кэш кадров">
-                <Border x:Name="BuiltFill" Width="0" HorizontalAlignment="Left" CornerRadius="2"
-                        Background="{StaticResource OkBrush}" />
+                    <TextBlock x:Name="TxtSegment" DockPanel.Dock="Right" VerticalAlignment="Center"
+                               Margin="10,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="12.5"
+                               Foreground="{StaticResource MutedBrush}" />
+                    <Button x:Name="BtnLoop" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
+                            Content="Петля" Margin="0" Click="Loop_Click"
+                            ToolTip="Повторять отрезок при воспроизведении (L)" />
+                    <Button x:Name="BtnSegReset" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
+                            Content="Сбросить" Click="SegmentReset_Click"
+                            ToolTip="Отрезок на весь ролик (Shift+I)" />
+                    <Button x:Name="BtnOut" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
+                            Content="Конец отрезка" Click="SetOut_Click"
+                            ToolTip="Конец отрезка на текущем кадре (O)" />
+                    <Button x:Name="BtnIn" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
+                            Content="Начало отрезка" Click="SetIn_Click"
+                            ToolTip="Начало отрезка на текущем кадре (I)" />
+                </DockPanel>
             </Border>
 
-            <Grid Grid.Row="2" Margin="0,6,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" x:Name="Tick0" Style="{StaticResource TickLabel}" HorizontalAlignment="Left" />
-                <TextBlock Grid.Column="1" x:Name="Tick1" Style="{StaticResource TickLabel}" HorizontalAlignment="Center" />
-                <TextBlock Grid.Column="2" x:Name="Tick2" Style="{StaticResource TickLabel}" HorizontalAlignment="Center" />
-                <TextBlock Grid.Column="3" x:Name="Tick3" Style="{StaticResource TickLabel}" HorizontalAlignment="Center" />
-                <TextBlock Grid.Column="4" x:Name="Tick4" Style="{StaticResource TickLabel}" HorizontalAlignment="Right" />
-            </Grid>
-
-            <!-- Полоска миниатюр: то же содержимое, что в фазе 2 ляжет на клип таймлайна.
-                 Тянется ровно до края собранного кэша — как и зелёная полоса выше,
-                 поэтому её ширина говорит, какая часть ролика уже в кэше. -->
-            <Grid x:Name="ThumbStripArea" Grid.Row="3" Height="46" Margin="0,8,0,0" Visibility="Collapsed"
-                  Cursor="Hand" Background="Transparent"
-                  MouseLeftButtonDown="ThumbStrip_MouseDown" MouseMove="ThumbStrip_MouseMove"
-                  MouseLeftButtonUp="ThumbStrip_MouseUp" SizeChanged="ThumbStrip_SizeChanged">
-                <Border x:Name="ThumbStripBox" HorizontalAlignment="Left" Width="0"
-                        BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="4"
-                        Background="{StaticResource VideoBrush}" ClipToBounds="True">
-                    <UniformGrid x:Name="ThumbStrip" Rows="1" />
-                </Border>
-
-                <!-- Playhead поверх миниатюр: тёмная окантовка обязательна, иначе
-                     оранжевая линия теряется на светлых кадрах -->
-                <Border x:Name="ThumbHead" Width="5" HorizontalAlignment="Left"
-                        Background="{StaticResource AccentBrush}"
-                        BorderBrush="#CC05070B" BorderThickness="1,0,1,0" />
-            </Grid>
+            <tl:TimelineControl x:Name="Timeline" Grid.Row="1" Margin="12,0,12,4" />
         </Grid>
 
         <!-- Транспорт -->
@@ -362,7 +347,20 @@
             </Border>
 
             <Button x:Name="BtnStart" Style="{StaticResource ToolButton}" Content="В начало" Margin="16,0,0,0"
-                    Click="ToStart_Click" ToolTip="Первый кадр (Home)" />
+                    Click="ToStart_Click" ToolTip="Начало отрезка (Home); Shift+Home — первый кадр ролика" />
+
+            <!-- Скорость воспроизведения: на шаг и seek не влияет, только на ход
+                 воспроизведения. Поле правится и вручную — набор готовых значений
+                 всё равно не покрыл бы «0,3×» для разбора быстрого движения. -->
+            <TextBlock Text="скорость" Margin="10,0,8,0" VerticalAlignment="Center"
+                       FontSize="12.5" Foreground="{StaticResource MutedBrush}" />
+            <Button x:Name="BtnSpeedDown" Style="{StaticResource TimelineButton}" Content="−"
+                    Margin="0,0,4,0" Click="SpeedDown_Click" ToolTip="Медленнее на 0,25×" />
+            <TextBox x:Name="TxtSpeed" Style="{StaticResource SpeedBox}" Text="1"
+                     KeyDown="Speed_KeyDown" LostFocus="Speed_LostFocus"
+                     ToolTip="Скорость воспроизведения: введите число и нажмите Enter" />
+            <Button x:Name="BtnSpeedUp" Style="{StaticResource TimelineButton}" Content="+"
+                    Margin="4,0,0,0" Click="SpeedUp_Click" ToolTip="Быстрее на 0,25×" />
         </StackPanel>
 
         <!-- Строка сообщений -->

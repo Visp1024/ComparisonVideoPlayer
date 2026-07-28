@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -32,14 +33,17 @@ public partial class MainWindow : Window
     /// </summary>
     private IPlaybackBackend _backend;
 
-    /// <summary>Идёт перетаскивание playhead: seek делаем один раз, отпустив кнопку.</summary>
+    /// <summary>Идёт перетаскивание playhead: на медленном источнике seek делаем, отпустив кнопку.</summary>
     private bool _scrubbing;
-
-    /// <summary>Значение шкалы меняет код, а не пользователь — реагировать на это не нужно.</summary>
-    private bool _syncingScrub;
 
     /// <summary>Идёт декодирование кадра при перетаскивании: следующие движения мыши пропускаем.</summary>
     private bool _seeking;
+
+    /// <summary>Повторять отрезок при воспроизведении (клавиша L). Состояние переживает перезапуск.</summary>
+    private bool _loop;
+
+    /// <summary>Выбранная скорость воспроизведения; движок при смене режима её подхватывает.</summary>
+    private double _speed = 1;
 
     public MainWindow()
     {
@@ -81,6 +85,7 @@ public partial class MainWindow : Window
     {
         VideoHost.Player = _flyleaf.Player;
         InitCacheUi();
+        InitTimeline();
 
         // Накладка — отдельное окно, перетаскивание из главного окна там не ловится.
         OverlayRoot.DragOver += OnDragOver;
@@ -100,6 +105,8 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         App.Settings.ShowOverlay = Osd.Visibility == Visibility.Visible;
+        App.Settings.LoopSegment = _loop;
+        App.Settings.SnapToFrames = Timeline.SnapEnabled;
         App.Settings.Save();
 
         CancelBuild();
@@ -111,11 +118,24 @@ public partial class MainWindow : Window
 
     private void Open_Click(object sender, RoutedEventArgs e) => OpenWithDialog();
     private void Close_Click(object sender, RoutedEventArgs e) => CloseFile();
-    private void PlayPause_Click(object sender, RoutedEventArgs e) => _backend.TogglePlayPause();
+    private void PlayPause_Click(object sender, RoutedEventArgs e) => TogglePlayPause();
     private void StepNext_Click(object sender, RoutedEventArgs e) => _backend.StepForward();
     private void StepPrev_Click(object sender, RoutedEventArgs e) => _backend.StepBack();
-    private void ToStart_Click(object sender, RoutedEventArgs e) => SeekFrame(0);
+    private void ToStart_Click(object sender, RoutedEventArgs e) => SeekFrame(Timeline.InFrame);
     private void Info_Click(object sender, RoutedEventArgs e) => ToggleInfoPanel();
+
+    /// <summary>
+    /// Воспроизведение всегда идёт внутри отрезка: запуск с кадра вне его начинается
+    /// с начала отрезка, иначе кнопка «play» на отрезанном хвосте не делала бы ничего.
+    /// </summary>
+    private void TogglePlayPause()
+    {
+        if (!_backend.IsPlaying && _backend.IsOpen && Timeline.IsOpen
+            && (_backend.FrameIndex < Timeline.InFrame || _backend.FrameIndex >= Timeline.OutFrame))
+            SeekFrame(Timeline.InFrame);
+
+        _backend.TogglePlayPause();
+    }
 
     /// <summary>
     /// Панель сведений — накладка поверх кадра, а не постоянная колонка: при открытии
@@ -135,6 +155,10 @@ public partial class MainWindow : Window
 
     private bool HandleKey(Key key)
     {
+        // Пока правят поле скорости, клавиши принадлежат ему: иначе пробел ставил бы
+        // плеер на паузу вместо ввода, а стрелки уводили бы кадр вместо курсора.
+        if (Keyboard.FocusedElement is TextBox) return false;
+
         var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         var step = shift ? 10 : 1;
@@ -142,13 +166,30 @@ public partial class MainWindow : Window
         switch (key)
         {
             case Key.O when ctrl: OpenWithDialog(); return true;
-            case Key.Space: _backend.TogglePlayPause(); return true;
+            case Key.Space: TogglePlayPause(); return true;
             case Key.Right: _backend.StepForward(step); return true;
             case Key.Left: _backend.StepBack(step); return true;
-            case Key.Home: SeekFrame(0); return true;
-            case Key.End when _backend.Media is { } m: SeekFrame(m.FrameCount - 1); return true;
+
+            // Home/End работают по отрезку — он и есть рабочая область; края ролика под Shift.
+            case Key.Home: SeekFrame(shift ? 0 : Timeline.InFrame); return true;
+            case Key.End when _backend.Media is { } m:
+                SeekFrame(shift ? m.FrameCount - 1 : Timeline.OutFrame);
+                return true;
+
             case Key.T: ToggleOverlay(); return true;
-            case Key.I: ToggleInfoPanel(); return true;
+
+            // I и O заняты отрезком: в покадровой работе он нужнее панели сведений,
+            // которая переехала на Ctrl+I.
+            case Key.I when ctrl: ToggleInfoPanel(); return true;
+            case Key.I when shift: ResetSegment(); return true;
+            case Key.I: SetSegmentIn(); return true;
+            case Key.O: SetSegmentOut(); return true;
+            case Key.L: ToggleLoop(); return true;
+            case Key.S: ToggleSnap(); return true;
+            case Key.F: FitTimeline(); return true;
+            case Key.OemPlus or Key.Add: ZoomTimeline(ZoomStep); return true;
+            case Key.OemMinus or Key.Subtract: ZoomTimeline(1 / ZoomStep); return true;
+
             case Key.C: ToggleCachePanel(); return true;
             default: return false;
         }
@@ -273,33 +314,260 @@ public partial class MainWindow : Window
         DropHint.Text = "или нажмите «Открыть файл» · mp4, mkv, mov, avi, ts";
     }
 
-    // ---------- шкала позиции ----------
+    // ---------- таймлайн ----------
 
-    private void Scrub_MouseDown(object sender, MouseButtonEventArgs e) => _scrubbing = true;
+    /// <summary>Шаг зума за щелчок колеса и за нажатие «+»/«−».</summary>
+    private const double ZoomStep = 1.25;
 
-    private void Scrub_MouseUp(object sender, MouseButtonEventArgs e)
+    private void InitTimeline()
     {
-        if (!_scrubbing) return;
-        _scrubbing = false;
-        if (_backend.IsOpen) SeekFrame((long)Scrub.Value);
+        _loop = App.Settings.LoopSegment;
+        Timeline.SnapEnabled = App.Settings.SnapToFrames;
+
+        Timeline.ThumbnailProvider = ThumbnailAt;
+        Timeline.ScrubStarted += (_, _) => _scrubbing = true;
+        Timeline.ScrubMoved += (_, frame) => TimelineScrub(frame);
+        Timeline.ScrubEnded += (_, frame) => TimelineScrubEnd(frame);
+        Timeline.SegmentChanged += (_, _) => UpdateSegmentText();
+
+        UpdateTimelineButtons();
+        ShowSpeed();
     }
 
-    private void Scrub_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    /// <summary>
+    /// Playhead ведут мышью. Кадр показываем сразу, но только если источник быстрый
+    /// (кэш или all-intra): на long-GOP исходнике seek занимает около секунды, и декод
+    /// на каждое движение мыши сделал бы перетаскивание неуправляемым — там кадр
+    /// декодируется по отпусканию кнопки (поведение фазы 1).
+    /// </summary>
+    private void TimelineScrub(long frame)
     {
-        if (_syncingScrub || !_backend.IsOpen) return;
+        if (!_backend.IsOpen) return;
 
-        if (!_scrubbing)
+        Timeline.SetPosition(frame);
+        ShowFrameLabels(frame);
+        if (LiveScrub) ScrubToFrame(frame);
+    }
+
+    private void TimelineScrubEnd(long frame)
+    {
+        _scrubbing = false;
+        if (!_backend.IsOpen) return;
+
+        Timeline.SetPosition(frame);
+        SeekFrame(frame);
+    }
+
+    // ---------- скорость воспроизведения ----------
+
+    /// <summary>Шаг кнопок «−» и «+» у поля скорости.</summary>
+    private const double SpeedStep = 0.25;
+
+    private const double MinSpeed = 0.25;
+    private const double MaxSpeed = 8;
+
+    private void SpeedDown_Click(object sender, RoutedEventArgs e) => SetSpeed(_speed - SpeedStep);
+    private void SpeedUp_Click(object sender, RoutedEventArgs e) => SetSpeed(_speed + SpeedStep);
+
+    /// <summary>Ввод вручную применяется по Enter; Esc возвращает прежнее значение.</summary>
+    private void Speed_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
         {
-            SeekFrame((long)Scrub.Value);
+            ApplyTypedSpeed();
+            Keyboard.ClearFocus();
+            e.Handled = true;
             return;
         }
 
-        // Пока playhead тащат, кадр показываем сразу — но только если источник
-        // быстрый (кэш или all-intra). На long-GOP исходнике seek занимает около
-        // секунды, и декод на каждое движение мыши сделал бы перетаскивание
-        // неуправляемым: там кадр показываем, отпустив кнопку.
-        ShowFrameLabels((long)Scrub.Value);
-        if (LiveScrub) ScrubToFrame((long)Scrub.Value);
+        if (e.Key != Key.Escape) return;
+
+        ShowSpeed();
+        Keyboard.ClearFocus();
+        e.Handled = true;
+    }
+
+    private void Speed_LostFocus(object sender, RoutedEventArgs e) => ApplyTypedSpeed();
+
+    /// <summary>
+    /// Разбор введённого значения. Принимаем и точку, и запятую (раскладка у поля
+    /// одна, а привычки разные), лишний «×» отбрасываем; мусор молча откатываем.
+    /// </summary>
+    private void ApplyTypedSpeed()
+    {
+        var text = TxtSpeed.Text.Trim().TrimEnd('×', 'x', 'X').Replace(',', '.').Trim();
+
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var speed) && speed > 0)
+        {
+            SetSpeed(speed);
+            return;
+        }
+
+        Status($"непонятная скорость «{TxtSpeed.Text}» — оставил {SpeedName(_speed)}");
+        ShowSpeed();
+    }
+
+    /// <summary>
+    /// Скорость живёт в окне, а не в движке: при переходе на кэш и обратно движок
+    /// подменяется, и выбранную скорость надо навязать новому.
+    /// </summary>
+    private void SetSpeed(double speed)
+    {
+        var clamped = Math.Clamp(Math.Round(speed, 2), MinSpeed, MaxSpeed);
+        var changed = Math.Abs(clamped - _speed) > 0.001;
+
+        _speed = clamped;
+        ShowSpeed();
+        ApplySpeed();
+
+        if (changed) Status($"скорость воспроизведения: {SpeedName(clamped)}");
+    }
+
+    private void ShowSpeed()
+    {
+        TxtSpeed.Text = _speed.ToString("0.##", CultureInfo.GetCultureInfo("ru-RU"));
+        BtnSpeedDown.IsEnabled = _speed > MinSpeed;
+        BtnSpeedUp.IsEnabled = _speed < MaxSpeed;
+    }
+
+    private void ApplySpeed()
+    {
+        if (!_backend.IsOpen || Math.Abs(_backend.Speed - _speed) < 0.001) return;
+        _backend.Speed = _speed;
+    }
+
+    private static string SpeedName(double speed) =>
+        speed.ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")) + "×";
+
+    private void ZoomIn_Click(object sender, RoutedEventArgs e) => ZoomTimeline(ZoomStep);
+    private void ZoomOut_Click(object sender, RoutedEventArgs e) => ZoomTimeline(1 / ZoomStep);
+    private void Fit_Click(object sender, RoutedEventArgs e) => FitTimeline();
+    private void Snap_Click(object sender, RoutedEventArgs e) => ToggleSnap();
+    private void Loop_Click(object sender, RoutedEventArgs e) => ToggleLoop();
+    private void SetIn_Click(object sender, RoutedEventArgs e) => SetSegmentIn();
+    private void SetOut_Click(object sender, RoutedEventArgs e) => SetSegmentOut();
+    private void SegmentReset_Click(object sender, RoutedEventArgs e) => ResetSegment();
+
+    private void ZoomTimeline(double factor)
+    {
+        Timeline.Zoom(factor);
+        UpdateZoomText();
+    }
+
+    private void FitTimeline()
+    {
+        Timeline.FitAll();
+        UpdateZoomText();
+        Status("весь ролик в ширину окна (F)");
+    }
+
+    private void ToggleSnap()
+    {
+        Timeline.SnapEnabled = !Timeline.SnapEnabled;
+        App.Settings.SnapToFrames = Timeline.SnapEnabled;
+        UpdateTimelineButtons();
+        Status(Timeline.SnapEnabled ? "снэп включён (S)" : "снэп выключен (S)");
+    }
+
+    private void ToggleLoop()
+    {
+        _loop = !_loop;
+        App.Settings.LoopSegment = _loop;
+        UpdateTimelineButtons();
+        Status(_loop ? "петля по отрезку включена (L)" : "петля по отрезку выключена (L)");
+    }
+
+    private void SetSegmentIn()
+    {
+        if (!Timeline.IsOpen) return;
+        Timeline.SetIn(_backend.FrameIndex);
+        Status($"начало отрезка: кадр {Timeline.InFrame}");
+    }
+
+    private void SetSegmentOut()
+    {
+        if (!Timeline.IsOpen) return;
+        Timeline.SetOut(_backend.FrameIndex);
+        Status($"конец отрезка: кадр {Timeline.OutFrame}");
+    }
+
+    private void ResetSegment()
+    {
+        if (!Timeline.IsOpen) return;
+        Timeline.ResetSegment();
+        Status("отрезок сброшен на весь ролик");
+    }
+
+    /// <summary>
+    /// Конец отрезка при воспроизведении: с петлёй возвращаемся в начало, без неё
+    /// останавливаемся ровно на последнем кадре отрезка. Шаг и seek границами не
+    /// ограничены — отрезок ограничивает воспроизведение, а не просмотр.
+    /// </summary>
+    private void EnforceSegment()
+    {
+        if (!_backend.IsPlaying || !Timeline.IsOpen || _scrubbing) return;
+        if (_backend.FrameIndex < Timeline.OutFrame) return;
+
+        if (_loop)
+        {
+            SeekFrame(Timeline.InFrame);
+            _backend.Play();
+            return;
+        }
+
+        _backend.Pause();
+        SeekFrame(Timeline.OutFrame);
+        Status($"конец отрезка (кадр {Timeline.OutFrame}) — петля выключена (L)");
+    }
+
+    private void UpdateTimelineButtons()
+    {
+        Highlight(BtnSnap, Timeline.SnapEnabled);
+        Highlight(BtnLoop, _loop);
+
+        var open = _backend.IsOpen;
+        BtnZoomIn.IsEnabled = BtnZoomOut.IsEnabled = BtnFit.IsEnabled = open;
+        BtnIn.IsEnabled = BtnOut.IsEnabled = BtnSegReset.IsEnabled = open;
+
+        UpdateZoomText();
+        UpdateSegmentText();
+    }
+
+    private void Highlight(Button button, bool on)
+    {
+        button.Foreground = (Brush)FindResource(on ? "AccentBrush" : "TextBrush");
+        button.BorderBrush = (Brush)FindResource(on ? "AccentDim" : "LineBrush");
+    }
+
+    private void UpdateZoomText()
+    {
+        if (!Timeline.IsOpen)
+        {
+            TxtZoom.Text = "";
+            return;
+        }
+
+        var ratio = Timeline.ZoomRatio;
+        TxtZoom.Text = ratio < 1.05 ? "весь ролик" : $"1 : {ratio:0.#}";
+    }
+
+    private void UpdateSegmentText()
+    {
+        if (!Timeline.IsOpen || _backend.Media is not { } media)
+        {
+            TxtSegment.Text = "";
+            return;
+        }
+
+        if (Timeline.IsFullSegment)
+        {
+            TxtSegment.Text = "отрезок: весь ролик";
+            return;
+        }
+
+        var from = media.Fps > 0 ? TimeSpan.FromSeconds(Timeline.InFrame / media.Fps) : TimeSpan.Zero;
+        var to = media.Fps > 0 ? TimeSpan.FromSeconds(Timeline.OutFrame / media.Fps) : TimeSpan.Zero;
+        TxtSegment.Text = $"отрезок {ShortTimecode(from)} – {ShortTimecode(to)} · {Timeline.SegmentFrames} кадров";
     }
 
     /// <summary>
@@ -359,15 +627,16 @@ public partial class MainWindow : Window
         EmptyState.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
         BtnClose.IsEnabled = open;
         BtnPrev.IsEnabled = BtnNext.IsEnabled = BtnPlay.IsEnabled = BtnStart.IsEnabled = open;
-        Scrub.IsEnabled = open;
         FrameBadge.Visibility = open ? Visibility.Visible : Visibility.Hidden;
         BtnPlay.Content = _backend.IsPlaying ? "❚❚" : "▶";
 
         Title = open ? $"ComparisonVideoPlayer — {m!.FileName}" : "ComparisonVideoPlayer";
 
-        _syncingScrub = true;
-        Scrub.Maximum = open ? Math.Max(m!.FrameCount - 1, 1) : 1;
-        _syncingScrub = false;
+        // Смена материала (в том числе переход на прокси другой частоты) сбрасывает
+        // зум и отрезок; тот же ролик контрол узнаёт и ничего не трогает.
+        Timeline.SetMedia(m);
+        UpdateTimelineButtons();
+        ApplySpeed();
 
         InfoFile.Text = open ? m!.FileName : "—";
         InfoFile.ToolTip = open ? m!.FilePath : null;
@@ -388,7 +657,6 @@ public partial class MainWindow : Window
         if (!open) InfoRate.Foreground = (Brush)FindResource("TextBrush");
         InfoVfrNote.Visibility = open && m!.IsVariableFrameRate ? Visibility.Visible : Visibility.Collapsed;
 
-        UpdateTicks();
         UpdatePosition();
     }
 
@@ -410,14 +678,9 @@ public partial class MainWindow : Window
 
         ShowFrameLabels(_backend.FrameIndex);
 
-        if (!_scrubbing)
-        {
-            _syncingScrub = true;
-            Scrub.Value = Math.Clamp(_backend.FrameIndex, Scrub.Minimum, Scrub.Maximum);
-            _syncingScrub = false;
-        }
+        if (!_scrubbing) Timeline.SetPosition(_backend.FrameIndex);
 
-        UpdateThumbHead();
+        EnforceSegment();
     }
 
     /// <summary>Подписи таймкода и номера кадра — и в транспорте, и поверх изображения.</summary>
@@ -426,27 +689,13 @@ public partial class MainWindow : Window
         var m = _backend.Media;
         if (m is null) return;
 
-        var dragging = _scrubbing || _thumbDragging;
-        var time = dragging && m.Fps > 0 ? TimeSpan.FromSeconds(frame / m.Fps) : _backend.Position;
+        var time = _scrubbing && m.Fps > 0 ? TimeSpan.FromSeconds(frame / m.Fps) : _backend.Position;
         var approx = m.IsVariableFrameRate ? "≈" : "";
 
         TxtTime.Text = Timecode(time);
         TxtFrame.Text = $"кадр {approx}{frame} / {Math.Max(m.FrameCount - 1, 0)}";
         OsdTime.Text = Timecode(time);
         OsdFrame.Text = $"кадр {approx}{frame}";
-    }
-
-    private void UpdateTicks()
-    {
-        var m = _backend.Media;
-        TextBlock[] ticks = [Tick0, Tick1, Tick2, Tick3, Tick4];
-
-        for (var i = 0; i < ticks.Length; i++)
-        {
-            ticks[i].Text = m is null
-                ? ""
-                : ShortTimecode(TimeSpan.FromTicks((long)(m.Duration.Ticks * (i / (double)(ticks.Length - 1)))));
-        }
     }
 
     private void Status(string message) => TxtStatus.Text = message;

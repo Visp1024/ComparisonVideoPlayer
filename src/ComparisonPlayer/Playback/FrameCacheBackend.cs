@@ -34,6 +34,12 @@ public sealed class FrameCacheBackend(FlyleafBackend inner, CacheEntry entry) : 
     public TimeSpan Position => inner.Position;
     public long FrameIndex => inner.FrameIndex;
 
+    public double Speed
+    {
+        get => inner.Speed;
+        set => inner.Speed = value;
+    }
+
     public event EventHandler? PositionChanged;
     public event EventHandler? StateChanged;
 

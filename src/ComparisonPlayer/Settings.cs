@@ -29,6 +29,15 @@ public sealed class Settings
     /// <summary>Каталог последнего открытого файла — с него начинается диалог открытия.</summary>
     public string? LastFolder { get; set; }
 
+    /// <summary>
+    /// Повторять отрезок при воспроизведении (клавиша L). По умолчанию выключено:
+    /// плеер сначала ведёт себя как плеер, петля включается, когда она нужна.
+    /// </summary>
+    public bool LoopSegment { get; set; }
+
+    /// <summary>Притягивать playhead и ручки отрезка к границам кадров и ролика (клавиша S).</summary>
+    public bool SnapToFrames { get; set; } = true;
+
     /// <summary>Когда строить дисковый кэш кадров: авто по замеру, всегда, никогда.</summary>
     public FrameCacheMode CacheMode { get; set; } = FrameCacheMode.Auto;
 
