@@ -175,6 +175,72 @@
             <Setter Property="Margin" Value="0,0,0,5" />
         </Style>
 
+        <!-- Полоса прогресса сборки кэша (фаза 4) -->
+        <Style x:Key="CacheProgressBar" TargetType="ProgressBar">
+            <Setter Property="Height" Value="6" />
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Maximum" Value="100" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Border Background="{StaticResource PanelBrush}"
+                                BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                                CornerRadius="3">
+                            <Grid x:Name="PART_Track" ClipToBounds="True">
+                                <Border x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                        Background="{StaticResource AccentBrush}" CornerRadius="2" />
+                            </Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Переключатель режима кэша в панели «Кэш…» -->
+        <Style x:Key="CacheRadio" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="Margin" Value="0,0,0,7" />
+        </Style>
+
+        <!-- Выбор одного значения из ряда: набор «фишек» вместо выпадающего списка,
+             который в системном оформлении выпадает из тёмной палитры приложения -->
+        <Style x:Key="ChipToggle" TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{StaticResource Panel2Brush}"
+                                BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                                CornerRadius="4" Padding="9,3">
+                            <ContentPresenter x:Name="Content" TextBlock.Foreground="{StaticResource TextBrush}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource DimBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Bd" Property="Background" Value="#26F2A13C" />
+                                <Setter TargetName="Content" Property="TextBlock.Foreground"
+                                        Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PanelHint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="20,0,0,5" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
         <Style x:Key="TickLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource DimBrush}" />
             <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />

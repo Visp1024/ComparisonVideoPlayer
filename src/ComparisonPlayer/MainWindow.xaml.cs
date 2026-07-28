@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using ComparisonPlayer.Playback;
 using Microsoft.Win32;
 
@@ -19,7 +20,17 @@ public partial class MainWindow : Window
     private static readonly string[] VideoExtensions =
         [".mp4", ".mkv", ".mov", ".avi", ".ts", ".m4v", ".webm", ".wmv", ".mpg", ".mpeg"];
 
-    private readonly FlyleafBackend _backend = new();
+    /// <summary>
+    /// Прямой декод: он же владеет Player'ом, привязанным к FlyleafHost.
+    /// Живёт всё время работы окна, даже когда кадры идут из кэша.
+    /// </summary>
+    private readonly FlyleafBackend _flyleaf = new();
+
+    /// <summary>
+    /// Действующий движок: либо прямой декод, либо <see cref="FrameCacheBackend"/>
+    /// поверх него. Всё окно работает только через эту ссылку.
+    /// </summary>
+    private IPlaybackBackend _backend;
 
     /// <summary>Идёт перетаскивание playhead: seek делаем один раз, отпустив кнопку.</summary>
     private bool _scrubbing;
@@ -27,12 +38,15 @@ public partial class MainWindow : Window
     /// <summary>Значение шкалы меняет код, а не пользователь — реагировать на это не нужно.</summary>
     private bool _syncingScrub;
 
+    /// <summary>Идёт декодирование кадра при перетаскивании: следующие движения мыши пропускаем.</summary>
+    private bool _seeking;
+
     public MainWindow()
     {
         InitializeComponent();
 
-        _backend.PositionChanged += (_, _) => Dispatcher.BeginInvoke(UpdatePosition);
-        _backend.StateChanged += (_, _) => Dispatcher.BeginInvoke(UpdateState);
+        _backend = _flyleaf;
+        Subscribe(_backend);
 
         Loaded += OnLoaded;
         Closed += OnClosed;
@@ -47,9 +61,26 @@ public partial class MainWindow : Window
         Drop += OnDrop;
     }
 
+    /// <summary>Подписка окна на движок: при смене режима переезжает на новый.</summary>
+    private void Subscribe(IPlaybackBackend backend)
+    {
+        backend.PositionChanged += OnBackendPositionChanged;
+        backend.StateChanged += OnBackendStateChanged;
+    }
+
+    private void Unsubscribe(IPlaybackBackend backend)
+    {
+        backend.PositionChanged -= OnBackendPositionChanged;
+        backend.StateChanged -= OnBackendStateChanged;
+    }
+
+    private void OnBackendPositionChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(UpdatePosition);
+    private void OnBackendStateChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(UpdateState);
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        VideoHost.Player = _backend.Player;
+        VideoHost.Player = _flyleaf.Player;
+        InitCacheUi();
 
         // Накладка — отдельное окно, перетаскивание из главного окна там не ловится.
         OverlayRoot.DragOver += OnDragOver;
@@ -70,7 +101,10 @@ public partial class MainWindow : Window
     {
         App.Settings.ShowOverlay = Osd.Visibility == Visibility.Visible;
         App.Settings.Save();
-        _backend.Dispose();
+
+        CancelBuild();
+        if (!ReferenceEquals(_backend, _flyleaf)) _backend.Dispose();
+        _flyleaf.Dispose();
     }
 
     // ---------- команды ----------
@@ -91,6 +125,8 @@ public partial class MainWindow : Window
     private void ToggleInfoPanel()
     {
         var open = InfoPanel.Visibility == Visibility.Visible;
+        if (!open && CachePanel.Visibility == Visibility.Visible) ToggleCachePanel();
+
         InfoPanel.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
         BtnInfo.Foreground = (Brush)FindResource(open ? "TextBrush" : "AccentBrush");
         BtnInfo.BorderBrush = (Brush)FindResource(open ? "LineBrush" : "AccentDim");
@@ -113,6 +149,7 @@ public partial class MainWindow : Window
             case Key.End when _backend.Media is { } m: _backend.SeekToFrame(m.FrameCount - 1); return true;
             case Key.T: ToggleOverlay(); return true;
             case Key.I: ToggleInfoPanel(); return true;
+            case Key.C: ToggleCachePanel(); return true;
             default: return false;
         }
     }
@@ -140,6 +177,12 @@ public partial class MainWindow : Window
 
     private void OpenFile(string path)
     {
+        // Открытие всегда начинается с прямого декода: решение о кэше принимается
+        // после того, как файл открылся и стали известны кодек и число кадров.
+        CancelBuild();
+        ResetCacheState();
+        UseDirectBackend();
+
         var res = _backend.Open(path);
         if (!res.Success)
         {
@@ -153,13 +196,21 @@ public partial class MainWindow : Window
         var m = _backend.Media!;
         Status($"открыт {m.FileName} — {m.Codec} {m.Width}×{m.Height}, {m.Fps:F3} fps" +
                (m.HardwareAcceleration ? ", аппаратный декод" : ", программный декод"));
+
+        // Замер шага назад и сборка кэша — после того, как первый кадр уже на экране.
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => DecideCache(path));
     }
 
     private void CloseFile()
     {
         if (!_backend.IsOpen) return;
         var name = _backend.Media!.FileName;
+
+        CancelBuild();
         _backend.Close();
+        UseDirectBackend();
+        ResetCacheState();
+
         Status($"закрыт {name}");
     }
 
@@ -235,12 +286,49 @@ public partial class MainWindow : Window
 
     private void Scrub_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        // Пока playhead тащат, показываем цель, но не декодируем: на long-GOP шаг
-        // назад занимает около секунды, и seek на каждое движение мыши сделал бы
-        // перетаскивание неуправляемым. Кадр покажем, отпустив кнопку.
         if (_syncingScrub || !_backend.IsOpen) return;
-        if (_scrubbing) ShowFrameLabels((long)Scrub.Value);
-        else _backend.SeekToFrame((long)Scrub.Value);
+
+        if (!_scrubbing)
+        {
+            _backend.SeekToFrame((long)Scrub.Value);
+            return;
+        }
+
+        // Пока playhead тащат, кадр показываем сразу — но только если источник
+        // быстрый (кэш или all-intra). На long-GOP исходнике seek занимает около
+        // секунды, и декод на каждое движение мыши сделал бы перетаскивание
+        // неуправляемым: там кадр показываем, отпустив кнопку.
+        ShowFrameLabels((long)Scrub.Value);
+        if (LiveScrub) ScrubToFrame((long)Scrub.Value);
+    }
+
+    /// <summary>
+    /// Можно ли листать кадры прямо во время перетаскивания. Критерий тот же,
+    /// что и у решения о кэше: замеренный шаг быстрее порога либо кадры идут
+    /// из all-intra источника (кэш, ProRes и подобные).
+    /// </summary>
+    private bool LiveScrub
+    {
+        get
+        {
+            if (_backend.Media is not { } media) return false;
+            if (media.FromCache || StepSpeedProbe.IsAllIntra(media)) return true;
+            return _sourceStepMs > 0 && _sourceStepMs <= App.Settings.StepBackThresholdMs;
+        }
+    }
+
+    /// <summary>
+    /// Переход на кадр во время перетаскивания. Seek синхронный, поэтому пока
+    /// декодируется один кадр, соседние события мыши пропускаем — иначе очередь
+    /// seek'ов растёт и playhead отстаёт от курсора.
+    /// </summary>
+    private void ScrubToFrame(long frame)
+    {
+        if (_seeking) return;
+
+        _seeking = true;
+        try { _backend.SeekToFrame(frame); }
+        finally { _seeking = false; }
     }
 
     // ---------- обновление интерфейса ----------
@@ -270,6 +358,10 @@ public partial class MainWindow : Window
         InfoFps.Text = open ? m!.Fps.ToString("F3") : "—";
         InfoDuration.Text = open ? Timecode(m!.Duration) : "—";
         InfoFrames.Text = open ? m!.FrameCount.ToString() : "—";
+
+        InfoSource.Text = !open ? "—" : m!.FromCache ? "кэша" : "исходника";
+        InfoSource.Foreground = (Brush)FindResource(open && m!.FromCache ? "OkBrush" : "TextBrush");
+        UpdateProxyNote();
 
         InfoRate.Text = open ? (m!.IsVariableFrameRate ? "VFR" : "CFR") : "—";
         InfoRate.Foreground = open && m!.IsVariableFrameRate
@@ -306,6 +398,8 @@ public partial class MainWindow : Window
             Scrub.Value = Math.Clamp(_backend.FrameIndex, Scrub.Minimum, Scrub.Maximum);
             _syncingScrub = false;
         }
+
+        UpdateThumbHead();
     }
 
     /// <summary>Подписи таймкода и номера кадра — и в транспорте, и поверх изображения.</summary>
@@ -314,7 +408,8 @@ public partial class MainWindow : Window
         var m = _backend.Media;
         if (m is null) return;
 
-        var time = _scrubbing && m.Fps > 0 ? TimeSpan.FromSeconds(frame / m.Fps) : _backend.Position;
+        var dragging = _scrubbing || _thumbDragging;
+        var time = dragging && m.Fps > 0 ? TimeSpan.FromSeconds(frame / m.Fps) : _backend.Position;
         var approx = m.IsVariableFrameRate ? "≈" : "";
 
         TxtTime.Text = Timecode(time);

@@ -18,6 +18,11 @@ namespace ComparisonPlayer.Playback;
 /// При VFR номер кадра — производная от timestamp величина, а не точный счётчик.
 /// </param>
 /// <param name="HardwareAcceleration">Декодирование идёт на видеокарте (D3D11).</param>
+/// <param name="FromCache">
+/// Кадры берутся из all-intra прокси, собранного ffmpeg'ом (фаза 4), а не из исходного файла.
+/// Остальные поля при этом описывают исходник — кроме частоты и числа кадров, которые
+/// прокси приводит к постоянным.
+/// </param>
 public sealed record MediaInfo(
     string FilePath,
     string Codec,
@@ -27,7 +32,8 @@ public sealed record MediaInfo(
     TimeSpan Duration,
     long FrameCount,
     bool IsVariableFrameRate,
-    bool HardwareAcceleration)
+    bool HardwareAcceleration,
+    bool FromCache = false)
 {
     public string FileName => Path.GetFileName(FilePath);
 

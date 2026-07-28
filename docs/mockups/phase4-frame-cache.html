@@ -527,6 +527,20 @@
         </div>
 
         <div class="sep"></div>
+        <h3>Ч А С Т О Т А   П Р О К С И</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <span class="btn">как в исходнике</span>
+          <span class="btn">60</span><span class="btn">50</span><span class="btn">30</span>
+          <span class="btn">25</span><span class="btn">24</span>
+          <span class="btn" style="color:var(--accent);border-color:var(--accent);background:#26F2A13C">15</span>
+          <span class="btn">12</span><span class="btn">10</span><span class="btn">5</span>
+        </div>
+        <div class="hint" style="font-size:12px;color:var(--muted);margin-top:7px">
+          ниже исходной — кэш меньше и собирается быстрее, но кадры прореживаются,
+          а их номера становятся номерами прокси
+        </div>
+
+        <div class="sep"></div>
         <h3>Э Т О Т   Ф А Й Л</h3>
         <div class="kv"><span class="k">Режим</span><span class="v">кэш</span></div>
         <div class="kv"><span class="k">Шаг назад</span><span class="v">8 мс / 1120 мс</span></div>
@@ -552,7 +566,7 @@
           <tr><th>Параметр</th><th>Значение</th></tr>
           <tr><td>Формат прокси</td><td class="mono">H.264, <code>-g 1</code>, CRF 20, veryfast</td></tr>
           <tr><td>Разрешение</td><td class="mono">как в исходнике</td></tr>
-          <tr><td>Частота</td><td class="mono">CFR по средней частоте исходника</td></tr>
+          <tr><td>Частота</td><td class="mono">настраивается: как в исходнике либо 60…5 кадров/с</td></tr>
           <tr><td>Звук</td><td class="mono">выбрасывается (<code>-an</code>)</td></tr>
           <tr><td>Лимит</td><td class="mono">20 ГБ, очистка LRU</td></tr>
           <tr><td>Расположение</td><td class="mono">%APPDATA%\ComparisonVideoPlayer\cache</td></tr>
