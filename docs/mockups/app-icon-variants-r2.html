@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComparisonVideoPlayer — иконка, итерация 2: вариации 4 и 5</title>
+<style>
+  :root {
+    --bg:     #0e1015;
+    --panel:  #161923;
+    --line:   #2a2f40;
+    --text:   #e2e6f0;
+    --muted:  #8a92a8;
+    --dim:    #5d6479;
+    --accent: #f2a13c;
+    --shadow: 0 18px 44px -22px rgba(0,0,0,.9);
+    --sans: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #eceef3; --panel: #ffffff; --line: #d3d7e2; --text: #1a1e2a;
+      --muted: #5f6779; --dim: #8d93a3; --accent: #b96f0c;
+      --shadow: 0 14px 34px -20px rgba(20,26,44,.45);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 28px 72px; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.01em; }
+  .lead { margin: 0 0 30px; color: var(--muted); max-width: 74ch; }
+  h2.group {
+    font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--dim); margin: 34px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: var(--shadow); padding: 18px 18px 20px;
+  }
+  .card .tag { font: 600 11px/1 var(--mono); letter-spacing: .1em; color: var(--dim); }
+  .card h3 { font-size: 15px; font-weight: 600; margin: 8px 0 4px; }
+  .card p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+  .big { display: block; width: 120px; height: 120px; margin: 12px 0 16px; border-radius: 20px; }
+  .sizes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .swatch { display: flex; gap: 9px; align-items: flex-end; padding: 9px 11px; border-radius: 6px; }
+  .swatch.dark  { background: #101218; }
+  .swatch.light { background: #f4f5f9; }
+  .size { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .size span { font: 500 10px/1 var(--mono); color: var(--dim); }
+  .s48 { width: 48px; height: 48px; } .s32 { width: 32px; height: 32px; } .s16 { width: 16px; height: 16px; }
+  footer { max-width: 1120px; margin: 36px auto 0; color: var(--muted); font-size: 13px; }
+  footer b { color: var(--text); font-weight: 600; }
+  code { font-family: var(--mono); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ============ библиотека иконок ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#242a3a"/><stop offset="1" stop-color="#141824"/>
+    </linearGradient>
+    <linearGradient id="plateLight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6e9f2"/>
+    </linearGradient>
+    <clipPath id="halfL"><rect x="0" y="0" width="124" height="256"/></clipPath>
+    <clipPath id="halfR"><rect x="124" y="0" width="132" height="256"/></clipPath>
+
+    <!-- ---- 4A: диагональный разлом ---- -->
+    <symbol id="ic4a" viewBox="0 0 256 256">
+      <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#plate)"/>
+      <g clip-path="url(#halfL)"><path d="M76 56 L196 128 L76 200 Z" fill="#e9edf7" transform="translate(-12 -10)"/></g>
+      <g clip-path="url(#halfR)"><path d="M76 56 L196 128 L76 200 Z" fill="#f2a13c" transform="translate(12 10)"/></g>
+      <rect x="120" y="30" width="12" height="196" rx="6" fill="#0e1015"/>
+    </symbol>
+
+    <!-- ---- 4B: двойная экспозиция ---- -->
+    <symbol id="ic4b" viewBox="0 0 256 256">
+      <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#plate)"/>
+      <path d="M74 60 L184 128 L74 196 Z" fill="#4b5573" transform="translate(-16 -14)"/>
+      <path d="M74 60 L184 128 L74 196 Z" fill="none" stroke="#141824" stroke-width="14"
+            stroke-linejoin="round" transform="translate(16 14)"/>
+      <path d="M74 60 L184 128 L74 196 Z" fill="#f2a13c" transform="translate(16 14)"/>
+    </symbol>
+
+    <!-- ---- 4C: кнопка из двух половин ---- -->
+    <symbol id="ic4c" viewBox="0 0 256 256">
+      <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#plate)"/>
+      <g clip-path="url(#halfL)"><circle cx="128" cy="128" r="88" fill="#e9edf7"/></g>
+      <g clip-path="url(#halfR)"><circle cx="128" cy="128" r="88" fill="#f2a13c"/></g>
+      <rect x="121" y="34" width="14" height="188" fill="#171b26"/>
+      <path d="M104 86 L172 128 L104 170 Z" fill="#171b26"/>
+    </symbol>
+
+    <!-- ---- 5A: сдвинутые треки ---- -->
+    <symbol id="ic5a" viewBox="0 0 256 256">
+      <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#plate)"/>
+      <rect x="40" y="74" width="120" height="42" rx="10" fill="#f2a13c"/>
+      <rect x="74" y="140" width="142" height="42" rx="10" fill="#4b5573"/>
+      <rect x="122" y="40" width="12" height="176" rx="6" fill="#e9edf7"/>
+      <path d="M128 32 L140 46 L116 46 Z" fill="#e9edf7"/>
+    </symbol>
+
+    <!-- ---- 5B: выровненные треки с кадрами ---- -->
+    <symbol id="ic5b" viewBox="0 0 256 256">
+      <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#plate)"/>
+      <g>
+        <rect x="42" y="76" width="172" height="44" rx="10" fill="#f2a13c"/>
+        <g fill="#171b26" opacity=".55">
+          <rect x="84" y="76" width="6" height="44"/><rect x="126" y="76" width="6" height="44"/><rect x="168" y="76" width="6" height="44"/>
+        </g>
+      </g>
+      <g>
+        <rect x="42" y="136" width="172" height="44" rx="10" fill="#4b5573"/>
+        <g fill="#171b26" opacity=".55">
+          <rect x="84" y="136" width="6" height="44"/><rect x="126" y="136" width="6" height="44"/><rect x="168" y="136" width="6" height="44"/>
+        </g>
+      </g>
+      <rect x="123" y="52" width="10" height="164" rx="5" fill="#e9edf7"/>
+      <circle cx="128" cy="52" r="16" fill="#e9edf7"/>
+    </symbol>
+
+    <!-- ---- 5C: светлый корпус ---- -->
+    <symbol id="ic5c" viewBox="0 0 256 256">
+      <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#plateLight)"/>
+      <rect x="40" y="74" width="120" height="42" rx="10" fill="#f2a13c"/>
+      <rect x="74" y="140" width="142" height="42" rx="10" fill="#2b3145"/>
+      <rect x="122" y="40" width="12" height="176" rx="6" fill="#12151d"/>
+      <path d="M128 32 L140 46 L116 46 Z" fill="#12151d"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <h1>Иконка приложения — итерация 2</h1>
+  <p class="lead">По три вариации на выбранные варианты <b>4 (расщеплённый play)</b> и
+     <b>5 (два трека и playhead)</b>. Внутри каждой тройки меняется только приём — палитра общая
+     с UI плеера (подложка <code>#171b26</code>, акцент <code>#f2a13c</code>), кроме 5C, где
+     специально проверяется светлый корпус. Каждая вариация показана крупно и в реальных
+     48 / 32 / 16 px на тёмном и светлом фоне.</p>
+
+  <h2 class="group">Вариант 4 — расщеплённый play</h2>
+  <div class="row">
+
+    <section class="card">
+      <div class="tag">4A</div>
+      <h3>Диагональный разлом</h3>
+      <svg class="big" viewBox="0 0 256 256"><use href="#ic4a"/></svg>
+      <p>Исходная форма: play разрезан вертикально, половинки разведены по диагонали, между ними
+         тёмный зазор. Максимально контрастный силуэт, читается до 16 px.</p>
+      <div class="sizes">
+        <div class="swatch dark">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic4a"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic4a"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic4a"/></svg><span>16</span></div>
+        </div>
+        <div class="swatch light">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic4a"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic4a"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic4a"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tag">4B</div>
+      <h3>Двойная экспозиция</h3>
+      <svg class="big" viewBox="0 0 256 256"><use href="#ic4b"/></svg>
+      <p>Два целых знака play, наложенных со смещением: задний серый «отстаёт», передний оранжевый
+         обведён тёмным. Про рассинхрон двух дублей, форма при этом остаётся целой.</p>
+      <div class="sizes">
+        <div class="swatch dark">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic4b"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic4b"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic4b"/></svg><span>16</span></div>
+        </div>
+        <div class="swatch light">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic4b"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic4b"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic4b"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tag">4C</div>
+      <h3>Кнопка из двух половин</h3>
+      <svg class="big" viewBox="0 0 256 256"><use href="#ic4c"/></svg>
+      <p>Круглая кнопка play, разделённая надвое: светлая половина A, оранжевая B, знак play вырезан
+         насквозь. Самая «плеерная» из тройки и самая устойчивая форма на мелких размерах.</p>
+      <div class="sizes">
+        <div class="swatch dark">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic4c"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic4c"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic4c"/></svg><span>16</span></div>
+        </div>
+        <div class="swatch light">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic4c"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic4c"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic4c"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <h2 class="group">Вариант 5 — два трека и playhead</h2>
+  <div class="row">
+
+    <section class="card">
+      <div class="tag">5A</div>
+      <h3>Сдвинутые треки</h3>
+      <svg class="big" viewBox="0 0 256 256"><use href="#ic5a"/></svg>
+      <p>Исходная форма: клипы разной длины со сдвигом друг относительно друга, playhead с флажком.
+         Читается как «дорожки ещё не выровнены».</p>
+      <div class="sizes">
+        <div class="swatch dark">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic5a"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic5a"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic5a"/></svg><span>16</span></div>
+        </div>
+        <div class="swatch light">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic5a"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic5a"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic5a"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tag">5B</div>
+      <h3>Выровненные треки с кадрами</h3>
+      <svg class="big" viewBox="0 0 256 256"><use href="#ic5b"/></svg>
+      <p>Треки одинаковой длины, поделённые насечками на кадры, playhead с круглой ручкой ровно
+         посередине. Спокойнее и симметричнее 5A, сильнее намёк на покадровость.</p>
+      <div class="sizes">
+        <div class="swatch dark">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic5b"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic5b"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic5b"/></svg><span>16</span></div>
+        </div>
+        <div class="swatch light">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic5b"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic5b"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic5b"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="tag">5C</div>
+      <h3>Светлый корпус</h3>
+      <svg class="big" viewBox="0 0 256 256"><use href="#ic5c"/></svg>
+      <p>Та же композиция, что 5A, но на светлой подложке: тёмный трек и тёмный playhead.
+         Заметнее на тёмной панели задач, ближе к иконкам системных приложений Windows.</p>
+      <div class="sizes">
+        <div class="swatch dark">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic5c"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic5c"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic5c"/></svg><span>16</span></div>
+        </div>
+        <div class="swatch light">
+          <div class="size"><svg class="s48" viewBox="0 0 256 256"><use href="#ic5c"/></svg><span>48</span></div>
+          <div class="size"><svg class="s32" viewBox="0 0 256 256"><use href="#ic5c"/></svg><span>32</span></div>
+          <div class="size"><svg class="s16" viewBox="0 0 256 256"><use href="#ic5c"/></svg><span>16</span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p><b>Что дальше.</b> Выбранная вариация (или гибрид — например силуэт 4C с треками 5B на светлом
+       корпусе 5C) уходит в финальный SVG → многоразмерный <code>app.ico</code> (256/64/48/32/16) →
+       <code>&lt;ApplicationIcon&gt;</code> в <code>ComparisonPlayer.csproj</code> и <code>Icon</code>
+       у главного окна. Первая итерация с пятью вариантами:
+       <code>docs/mockups/app-icon-variants.html</code>.</p>
+  </footer>
+</div>
+
+</body>
+</html>
