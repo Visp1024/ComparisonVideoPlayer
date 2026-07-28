@@ -32,6 +32,7 @@ public partial class App : Application
         StartupFileB = files.Skip(1).FirstOrDefault();
         Settings = Settings.Load();
         Directory.CreateDirectory(AppEnv.DataDir);
+        AppEnv.CleanupEngineLogs();
 
         try
         {
@@ -46,12 +47,16 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
-                $"Не удалось запустить движок воспроизведения.\n\n{ex.Message}\n\n" +
-                $"Библиотеки FFmpeg ожидались в каталоге:\n{(string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "(не найден)" : AppEnv.FFmpegDir)}\n\n" +
-                "Укажите каталог переменной окружения COMPARISONPLAYER_FFMPEG_DIR " +
-                "или положите библиотеки в подкаталог FFmpeg рядом с программой.",
-                "ComparisonVideoPlayer", MessageBoxButton.OK, MessageBoxImage.Error);
+            // Подсказку про FFmpeg показываем, только если каталог библиотек и правда негоден:
+            // раньше она стояла в любом отказе и уводила от настоящей причины.
+            var message = $"Не удалось запустить движок воспроизведения.\n\n{ex.Message}";
+            if (!AppEnv.FFmpegLooksUsable)
+                message +=
+                    $"\n\nБиблиотеки FFmpeg ожидались в каталоге:\n{(string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "(не найден)" : AppEnv.FFmpegDir)}\n\n" +
+                    "Укажите каталог переменной окружения COMPARISONPLAYER_FFMPEG_DIR " +
+                    "или положите библиотеки в подкаталог FFmpeg рядом с программой.";
+
+            MessageBox.Show(message, "ComparisonVideoPlayer", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
             return;
         }
