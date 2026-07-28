@@ -14,7 +14,7 @@
 
 </div>
 
-![Два трека, таймлайн и транспорт](docs/phase5-artifacts/two-tracks.png)
+![Два трека, таймлайн с миниатюрами и транспорт](docs/screenshot.png)
 
 ## Зачем
 
