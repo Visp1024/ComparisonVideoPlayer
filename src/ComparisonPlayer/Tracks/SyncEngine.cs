@@ -119,6 +119,56 @@ public sealed class SyncEngine : IDisposable
                 track.Backend.Speed = _speed;
     }
 
+    // ---------- звук ----------
+
+    private int _volume = 100;
+    private bool _muted;
+
+    /// <summary>Громкость звучащего трека, 0..100.</summary>
+    public int Volume
+    {
+        get => _volume;
+        set
+        {
+            _volume = Math.Clamp(value, 0, 100);
+            ApplyAudio();
+        }
+    }
+
+    /// <summary>Звук выключен целиком: не звучит и мастер.</summary>
+    public bool Muted
+    {
+        get => _muted;
+        set
+        {
+            _muted = value;
+            ApplyAudio();
+        }
+    }
+
+    /// <summary>
+    /// Трек, с которого идёт звук: всегда мастер (PLAN.md §7.1). Отдельного выбора нет
+    /// намеренно — мастер и так тот трек, по которому идёт просмотр.
+    /// </summary>
+    public PlayerTrack? AudioTrack => Master;
+
+    /// <summary>Есть ли что слушать: у звучащего трека нашлась звуковая дорожка.</summary>
+    public bool HasAudio => Master is { } m && m.Backend.HasAudio;
+
+    /// <summary>
+    /// Развести звук по трекам: мастер звучит, ведомый приглушён. Нужно и после смены
+    /// движка — при переходе на кэш и обратно движок подменяется и о выбранной
+    /// громкости не знает (та же история, что с <see cref="ApplySpeed"/>).
+    /// </summary>
+    public void ApplyAudio()
+    {
+        foreach (var track in Tracks)
+        {
+            track.Backend.Volume = _volume;
+            track.Backend.Muted = _muted || Master is not { } master || !ReferenceEquals(master, track);
+        }
+    }
+
     /// <summary>Последнее замеренное расхождение ведомого, мс; 0 — сверять нечего.</summary>
     public double Drift { get; private set; }
 
@@ -170,6 +220,8 @@ public sealed class SyncEngine : IDisposable
             track.Backend.PositionChanged += OnTrackPosition;
             track.Backend.StateChanged += OnTrackState;
         }
+
+        ApplyAudio();
     }
 
     private void OnTrackPosition(object? sender, EventArgs e)
@@ -241,6 +293,9 @@ public sealed class SyncEngine : IDisposable
 
         // Кадр мастера сменился — время сохраняем, номер кадра пересчитываем.
         PositionFrame = Math.Clamp(TimelineFrameAt(time), 0, LastFrame);
+
+        // Звук идёт за мастером: иначе после смены мастера звучал бы ведомый.
+        ApplyAudio();
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 

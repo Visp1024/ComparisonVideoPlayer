@@ -40,6 +40,25 @@ public sealed class FrameCacheBackend(FlyleafBackend inner, CacheEntry entry) : 
         set => inner.Speed = value;
     }
 
+    /// <summary>
+    /// Звук берётся из прокси, а не из исходника: играет-то прокси. У записей,
+    /// собранных до появления звука в прокси, дорожки нет — панель кэша предлагает
+    /// собрать такую запись заново.
+    /// </summary>
+    public bool HasAudio => inner.HasAudio;
+
+    public int Volume
+    {
+        get => inner.Volume;
+        set => inner.Volume = value;
+    }
+
+    public bool Muted
+    {
+        get => inner.Muted;
+        set => inner.Muted = value;
+    }
+
     public event EventHandler? PositionChanged;
     public event EventHandler? StateChanged;
 

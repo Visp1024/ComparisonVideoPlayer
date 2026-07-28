@@ -11,7 +11,8 @@ namespace ComparisonPlayer.Playback;
 /// <summary>
 /// Основной движок: прямой декод через FlyleafLib (FFmpeg + D3D11).
 /// Конфигурация унаследована от спайка фазы 0: точный seek обязателен,
-/// автозапуск выключен, звук выключен, декод аппаратный.
+/// автозапуск выключен, декод аппаратный. Звук декодируется у обоих треков,
+/// но слышен только у мастера — кто именно приглушён, решает SyncEngine.
 /// </summary>
 public sealed class FlyleafBackend : IPlaybackBackend
 {
@@ -45,6 +46,24 @@ public sealed class FlyleafBackend : IPlaybackBackend
         set => _player.Speed = Math.Clamp(value, 0.05, 16);
     }
 
+    /// <summary>
+    /// Список дорожек заполняется при открытии файла, поэтому у закрытого движка
+    /// он пуст — отдельной проверки <see cref="IsOpen"/> не нужно.
+    /// </summary>
+    public bool HasAudio => _player.Audio.Streams is { Count: > 0 };
+
+    public int Volume
+    {
+        get => _player.Audio.Volume;
+        set => _player.Audio.Volume = Math.Clamp(value, 0, 100);
+    }
+
+    public bool Muted
+    {
+        get => _player.Audio.Mute;
+        set => _player.Audio.Mute = value;
+    }
+
     public event EventHandler? PositionChanged;
     public event EventHandler? StateChanged;
 
@@ -53,7 +72,10 @@ public sealed class FlyleafBackend : IPlaybackBackend
         var cfg = new Config();
         cfg.Player.AutoPlay = false;
         cfg.Player.SeekAccurate = true;      // покадровая точность seek — требование проекта
-        cfg.Audio.Enabled = false;           // фаза 1 без звука, решение по аудио — фаза 3
+        // Звук нужен только с мастер-трека (задача #20), но включён он у обоих:
+        // приглушение — свойство плеера, и переключать мастера им дешевле, чем
+        // переоткрывать звуковую дорожку на каждое нажатие M.
+        cfg.Audio.Enabled = true;
         cfg.Video.VideoAcceleration = true;  // аппаратный декод D3D11
 
         // Плавный playhead: по умолчанию FlyleafLib отдаёт CurTime раз в секунду,

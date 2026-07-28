@@ -35,6 +35,21 @@ public interface IPlaybackBackend : IDisposable
     /// </summary>
     double Speed { get; set; }
 
+    /// <summary>
+    /// Есть ли у открытого материала звуковая дорожка. У кэша это дорожка прокси:
+    /// записи, собранные до появления звука в прокси, её не имеют.
+    /// </summary>
+    bool HasAudio { get; }
+
+    /// <summary>Громкость, 0..100. У приглушённого трека звука нет независимо от неё.</summary>
+    int Volume { get; set; }
+
+    /// <summary>
+    /// Приглушить трек. Ведомый приглушён всегда: звук идёт только с мастера
+    /// (PLAN.md §7.1), иначе два ролика звучали бы поверх друг друга.
+    /// </summary>
+    bool Muted { get; set; }
+
     /// <summary>Позиция сменилась: шаг, seek или ход воспроизведения.</summary>
     event EventHandler? PositionChanged;
 

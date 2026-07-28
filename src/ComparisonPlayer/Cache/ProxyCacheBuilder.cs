@@ -40,6 +40,13 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
     public const string ThumbnailVersion = "thumbs-h72-v1";
 
     /// <summary>
+    /// Версия звуковой дорожки прокси. Держится отдельно от <see cref="Version"/> и в
+    /// ключ кэша не входит: кадры от неё не зависят, поэтому записи, собранные до
+    /// появления звука, остаются годными — по этому полю видно, что они молчат.
+    /// </summary>
+    public const string AudioVersion = "aac-192k-v1";
+
+    /// <summary>
     /// Подпись параметров прокси. Входит в ключ кэша: меняем параметры или частоту —
     /// старые записи перестают подходить сами, без ручной инвалидации.
     /// </summary>
@@ -93,6 +100,7 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
             FrameCount = totalFrames,
             DurationTicks = media.Duration.Ticks,
             Parameters = Signature(targetFps),
+            AudioVersion = AudioVersion,
             CreatedUtc = DateTime.UtcNow,
             LastUsedUtc = DateTime.UtcNow
         };
@@ -172,6 +180,11 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
     /// Прокси: каждый кадр — ключевой (<c>-g 1</c>), поэтому шаг назад не требует
     /// декодирования всей группы кадров. Частота приводится к постоянной — заодно
     /// это нормализует VFR-исходники, у которых номер кадра иначе неоднозначен.
+    ///
+    /// Звук переносится в прокси (задача #20): играет-то прокси, и брать звук из
+    /// исходника значило бы завести второй декодер, который пришлось бы догонять
+    /// до кадра — а так дорожка идёт тем же демуксером и не расходится в принципе.
+    /// Пониженная частота прокси на неё не влияет: <c>-r</c> касается только видео.
     /// </summary>
     private static string ProxyArgs(MediaInfo media, double fps, string output)
     {
@@ -182,8 +195,12 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
         // Фрагментированный MP4 (frag_keyframe + empty_moov): файл читается ещё
         // до окончания записи, поэтому плеер играет уже собранную часть кэша.
         // Обычный MP4 дописывает оглавление в конце и до этого непригоден.
+        // Звук пересобираем в AAC, а не копируем: mp4 принимает не всякий кодек
+        // (тот же Vorbis из mkv в него не уложить), а «?» у дорожки означает
+        // «если она есть» — ролик без звука так и остаётся немым, а не отказом.
         return $"-hide_banner -nostdin -loglevel error -y -i \"{media.FilePath}\" " +
-               $"-map 0:v:0 -an -sn -dn " +
+               $"-map 0:v:0 -map 0:a:0? -sn -dn " +
+               $"-c:a aac -b:a 192k " +
                $"-c:v libx264 -preset veryfast -crf {Crf} " +
                $"-g 1 -keyint_min 1 -sc_threshold 0 -bf 0 " +
                $"-pix_fmt yuv420p -fps_mode cfr{rate} " +

@@ -135,6 +135,7 @@ public partial class MainWindow : Window
         InitCacheUi();
         InitTimeline();
         InitCompact();
+        InitAudio();
         ApplyLayout();
 
         // Накладка — отдельное окно, перетаскивание из главного окна там не ловится.
@@ -212,6 +213,8 @@ public partial class MainWindow : Window
         App.Settings.ShowOverlay = _showOsd;
         App.Settings.LoopSegment = _loop;
         App.Settings.SnapToFrames = Timeline.SnapEnabled;
+        App.Settings.Volume = _sync.Volume;
+        App.Settings.Muted = _sync.Muted;
         App.Settings.Save();
 
         foreach (var track in _sync.Tracks)
@@ -338,7 +341,13 @@ public partial class MainWindow : Window
 
             case Key.Tab: SwitchActiveTrack(); return true;
             case Key.V: CycleLayout(); return true;
+
+            // M назначает мастера, и звук идёт за ним; выключается звук соседним Ctrl+M.
+            case Key.M when ctrl: ToggleMute(); return true;
             case Key.M: MakeActiveMaster(); return true;
+
+            case Key.Up when ctrl: NudgeVolume(VolumeStep); return true;
+            case Key.Down when ctrl: NudgeVolume(-VolumeStep); return true;
 
             // Ctrl+T сворачивает таймлайн до полосы, T без модификатора — накладка на кадре.
             case Key.T when ctrl: ToggleCompact(); return true;
@@ -403,7 +412,11 @@ public partial class MainWindow : Window
         _sync.SetMaster(_active);
         SeekFrame(_sync.PositionFrame);
         UpdateState();
-        Status($"мастер — трек {Active.Letter}: шаг меряется его кадрами ({Active.Fps:0.###} fps)");
+
+        // Звук переехал вместе с мастером — об этом стоит сказать сразу, иначе
+        // смена звучащего трека выглядит как самоволие плеера.
+        var audio = _sync.HasAudio && !_sync.Muted && _sync.Volume > 0 ? " и звук" : "";
+        Status($"мастер — трек {Active.Letter}: шаг меряется его кадрами ({Active.Fps:0.###} fps){audio}");
     }
 
     private void CycleLayout()
@@ -974,6 +987,106 @@ public partial class MainWindow : Window
     private static string SpeedName(double speed) =>
         speed.ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")) + "×";
 
+    // ---------- звук ----------
+
+    /// <summary>Шаг громкости у Ctrl+↑ и Ctrl+↓.</summary>
+    private const int VolumeStep = 5;
+
+    /// <summary>Ползунок расставляет код — принимать это за действие пользователя не нужно.</summary>
+    private bool _syncingVolumeUi;
+
+    /// <summary>
+    /// Звук всегда идёт с мастер-трека (PLAN.md §7.1): при сравнении двух роликов
+    /// две дорожки разом — каша, а выбирать звучащий трек отдельно от мастера значит
+    /// заводить второй «главный трек» там, где хватает одного.
+    /// </summary>
+    private void InitAudio()
+    {
+        _sync.Volume = App.Settings.Volume;
+        _sync.Muted = App.Settings.Muted;
+        ShowVolume();
+    }
+
+    private void Mute_Click(object sender, RoutedEventArgs e) => ToggleMute();
+
+    private void ToggleMute()
+    {
+        _sync.Muted = !_sync.Muted;
+        App.Settings.Muted = _sync.Muted;
+
+        ShowVolume();
+        UpdateInfoPanel();
+        ShowFrameLabels();
+        Status(AudioMessage());
+    }
+
+    private void Volume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_syncingVolumeUi) return;
+        SetVolume((int)Math.Round(e.NewValue));
+    }
+
+    private void NudgeVolume(int delta) => SetVolume(_sync.Volume + delta);
+
+    private void SetVolume(int volume)
+    {
+        var clamped = Math.Clamp(volume, 0, 100);
+        var changed = clamped != _sync.Volume;
+
+        _sync.Volume = clamped;
+        App.Settings.Volume = clamped;
+
+        // Прибавлять громкость при выключенном звуке — это попытка его вернуть,
+        // а не пожелание сделать тишину погромче.
+        if (clamped > 0 && _sync.Muted)
+        {
+            _sync.Muted = false;
+            App.Settings.Muted = false;
+        }
+
+        ShowVolume();
+        UpdateInfoPanel();
+        ShowFrameLabels();
+        if (changed) Status(AudioMessage());
+    }
+
+    private void ShowVolume()
+    {
+        // Ползунков два — в транспорте и в свёрнутом подвале; ведут они одну громкость,
+        // поэтому расставляются вместе, а не по видимости.
+        _syncingVolumeUi = true;
+        VolumeSlider.Value = VolumeSliderMini.Value = _sync.Volume;
+        _syncingVolumeUi = false;
+
+        var silent = _sync.Muted || _sync.Volume == 0;
+        var audible = _sync.HasAudio && !silent;
+
+        BtnMute.Content = BtnMuteMini.Content = silent ? "🔇" : "🔊";
+        Highlight(BtnMute, audible);
+        Highlight(BtnMuteMini, audible);
+
+        TxtVolume.Text = TxtVolumeMini.Text = !_sync.IsOpen ? "—"
+            : !_sync.HasAudio ? "нет"
+            : silent ? "выкл"
+            : $"{_sync.Volume} %";
+    }
+
+    /// <summary>Что происходит со звуком — тем же языком, что и остальная строка состояния.</summary>
+    private string AudioMessage()
+    {
+        if (_sync.AudioTrack is not { } track) return "звук зазвучит, когда откроется трек";
+
+        if (!_sync.HasAudio)
+            return CacheBuiltWithoutAudio(track)
+                ? $"у мастера {track.Letter} звука нет: кэш собран без дорожки — «Собрать заново» (C) вернёт её"
+                : $"у мастера {track.Letter} нет звуковой дорожки";
+
+        if (_sync.Muted) return "звук выключен (Ctrl+M)";
+        if (_sync.Volume == 0) return "громкость 0 % — тишина (Ctrl+↑ громче)";
+
+        return $"звук с трека {track.Letter} · громкость {_sync.Volume} %";
+    }
+
     // ---------- зум, снэп, отрезок ----------
 
     private void ZoomIn_Click(object sender, RoutedEventArgs e) => ZoomTimeline(ZoomStep);
@@ -1264,6 +1377,10 @@ public partial class MainWindow : Window
         ShowOffset();
         _sync.ApplySpeed();
 
+        // Звук привязан к мастеру и к движку трека, а меняются оба здесь же.
+        _sync.ApplyAudio();
+        ShowVolume();
+
         UpdateInfoPanel();
         UpdateModeBadges();
         UpdateCachePanel();
@@ -1293,6 +1410,13 @@ public partial class MainWindow : Window
             : master ? "мастер"
             : offset == 0 ? "ведомый"
             : $"ведомый, сдвиг {(offset > 0 ? "+" : "")}{offset}";
+
+        var sounds = _sync.AudioTrack is { } audio && ReferenceEquals(audio, track);
+        InfoAudio.Text = !open ? "—"
+            : !track.Backend.HasAudio ? (CacheBuiltWithoutAudio(track) ? "нет — кэш без звука" : "нет дорожки")
+            : !sounds ? "есть, приглушён (ведомый)"
+            : _sync.Muted || _sync.Volume == 0 ? "есть, выключен (Ctrl+M)"
+            : $"звучит · {_sync.Volume} %";
 
         UpdateProxyNote(track);
 
@@ -1356,8 +1480,12 @@ public partial class MainWindow : Window
 
         var isMaster = _sync.Master is { } master && ReferenceEquals(master, track);
         var offset = BothOpen() ? _sync.RelativeOffsetFrames(track) : 0;
+
+        // Отметка звука именно у кадра: иначе непонятно, который из двух роликов слышно.
+        var sounds = isMaster && _sync.HasAudio && !_sync.Muted && _sync.Volume > 0;
+
         role.Text = isMaster
-            ? $"мастер · {track.Fps:0.###} fps"
+            ? $"мастер · {track.Fps:0.###} fps" + (sounds ? " · звук" : "")
             : $"{(offset > 0 ? "+" : "")}{offset} кадров · {track.Fps:0.###} fps";
 
         // Вне материала (или вне отрезка) кадра нет: показываем это прямо,

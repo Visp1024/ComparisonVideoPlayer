@@ -401,6 +401,17 @@ public partial class MainWindow
         RefreshTimeline();
     }
 
+    /// <summary>
+    /// Молчит ли трек оттого, что его прокси собирался до того, как кэш научился
+    /// нести звук (задача #20). Такую запись не выбрасываем — кадры в ней исправны,
+    /// поэтому и в ключ кэша звук не входит; но сказать, что звук вернёт пересборка,
+    /// надо: иначе тишина на кэшированном ролике выглядит поломкой.
+    /// </summary>
+    private static bool CacheBuiltWithoutAudio(PlayerTrack track) =>
+        track.Media is { FromCache: true }
+        && !track.Backend.HasAudio
+        && track.CacheEntry?.AudioVersion != ProxyCacheBuilder.AudioVersion;
+
     // ---------- переключение движка ----------
 
     /// <summary>Перевести трек на кадры из кэша, сохранив позицию и состояние.</summary>
@@ -807,6 +818,11 @@ public partial class MainWindow
         var entry = track.CacheEntry;
         CacheFileProxy.Text = entry is null ? "—" : $"{Size(entry.Bytes)} · {entry.Fps:0.###} fps";
         CacheFileBuilt.Text = entry is null ? "—" : entry.CreatedUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+
+        CacheFileAudio.Text = !open || !fromCache ? "—"
+            : track.Backend.HasAudio ? "есть"
+            : CacheBuiltWithoutAudio(track) ? "нет — соберите заново"
+            : "нет дорожки в исходнике";
 
         BtnRebuild.IsEnabled = open && track.BuildCts is null && App.Settings.CacheMode != FrameCacheMode.Never;
         BtnUseSource.IsEnabled = fromCache;

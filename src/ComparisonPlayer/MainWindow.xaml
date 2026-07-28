@@ -269,6 +269,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Файл" Style="{StaticResource PanelKey}" />
@@ -298,6 +299,9 @@
 
                                 <TextBlock Grid.Row="8" Grid.Column="0" Text="Роль" Style="{StaticResource PanelKey}" />
                                 <TextBlock Grid.Row="8" Grid.Column="1" x:Name="InfoRole" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="9" Grid.Column="0" Text="Звук" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="9" Grid.Column="1" x:Name="InfoAudio" Style="{StaticResource PanelValue}" />
                             </Grid>
 
                             <TextBlock x:Name="InfoProxyNote" Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12"
@@ -367,6 +371,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Режим" Style="{StaticResource PanelKey}" />
@@ -380,6 +385,9 @@
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Собран" Style="{StaticResource PanelKey}" />
                                 <TextBlock Grid.Row="3" Grid.Column="1" x:Name="CacheFileBuilt" Style="{StaticResource PanelValue}" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Звук" Style="{StaticResource PanelKey}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" x:Name="CacheFileAudio" Style="{StaticResource PanelValue}" />
                             </Grid>
 
                             <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
@@ -514,6 +522,17 @@
                         <TextBlock x:Name="TxtFrameBMini" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
                                    FontSize="11.5" VerticalAlignment="Center"
                                    Foreground="{StaticResource TrackBBrush}" />
+                        <!-- Звук и в свёрнутом виде правится целиком: громкость нужна не
+                             реже транспорта, а разворачивать таймлайн ради неё незачем -->
+                        <Button x:Name="BtnMuteMini" Style="{StaticResource TimelineButton}" Content="🔊"
+                                Margin="10,0,6,0" Padding="7,1" Click="Mute_Click"
+                                ToolTip="Звук мастер-трека: включить или выключить (Ctrl+M)" />
+                        <Slider x:Name="VolumeSliderMini" Style="{StaticResource VolumeSlider}" Width="72"
+                                ValueChanged="Volume_Changed"
+                                ToolTip="Громкость звучащего трека (Ctrl+↑ / Ctrl+↓)" />
+                        <TextBlock x:Name="TxtVolumeMini" Margin="6,0,0,0" VerticalAlignment="Center" MinWidth="34"
+                                   FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                   Foreground="{StaticResource MutedBrush}" />
                         <Button x:Name="BtnExpand" Style="{StaticResource TimelineButton}" Content="▴"
                                 Margin="10,0,0,0" Padding="9,1" Click="ToggleCompact_Click"
                                 ToolTip="Развернуть таймлайн (Ctrl+T)" />
@@ -522,9 +541,12 @@
             </StackPanel>
         </Border>
 
-        <!-- Транспорт -->
-        <StackPanel x:Name="TransportRow" Grid.Row="4" Orientation="Horizontal" Margin="14,10,14,12"
-                    VerticalAlignment="Center">
+        <!-- Транспорт.
+             WrapPanel, а не StackPanel: с появлением громкости (задача #20) содержимое
+             перестало помещаться в окно наименьшей ширины, а обрезанный ползунок хуже
+             перенесённого на вторую строку. -->
+        <WrapPanel x:Name="TransportRow" Grid.Row="4" Orientation="Horizontal" Margin="14,10,14,12"
+                   VerticalAlignment="Center">
             <Button x:Name="BtnShuttleBack" Style="{StaticResource TransportButton}" Content="◀◀"
                     Click="ShuttleBack_Click" ToolTip="Шаттл назад: повторное нажатие вдвое быстрее (J)" />
             <Button x:Name="BtnPrev" Style="{StaticResource TransportButton}" Content="◀|" Click="StepPrev_Click"
@@ -568,7 +590,19 @@
                      ToolTip="Скорость воспроизведения: введите число и нажмите Enter" />
             <Button x:Name="BtnSpeedUp" Style="{StaticResource TimelineButton}" Content="+"
                     Margin="4,0,0,0" Click="SpeedUp_Click" ToolTip="Быстрее на 0,25×" />
-        </StackPanel>
+
+            <!-- Звук (задача #20): звучит только мастер-трек, ведомый приглушён всегда,
+                 иначе два ролика накладывались бы друг на друга. -->
+            <Button x:Name="BtnMute" Style="{StaticResource TimelineButton}" Content="🔊"
+                    Margin="14,0,8,0" Click="Mute_Click"
+                    ToolTip="Звук мастер-трека: включить или выключить (Ctrl+M)" />
+            <Slider x:Name="VolumeSlider" Style="{StaticResource VolumeSlider}" Width="96"
+                    ValueChanged="Volume_Changed"
+                    ToolTip="Громкость звучащего трека (Ctrl+↑ / Ctrl+↓)" />
+            <TextBlock x:Name="TxtVolume" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="34"
+                       FontFamily="{StaticResource MonoFont}" FontSize="12.5"
+                       Foreground="{StaticResource MutedBrush}" />
+        </WrapPanel>
 
         <!-- Строка сообщений: в компактном виде скрыта вместе с таймлайном -->
         <Border x:Name="StatusBar" Grid.Row="5" Background="{StaticResource Panel2Brush}"
