@@ -1,12 +1,10 @@
 # Проверка сборки: компилируем плеер и прогоняем упаковочный скрипт без FFmpeg
 # (нативные библиотеки нужны только готовой поставке — см. tools/publish.ps1).
+#
+# Только по кнопке: автоматически на push и pull request ничего не запускается.
 name: Сборка
 
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
   workflow_dispatch:
 
 jobs:

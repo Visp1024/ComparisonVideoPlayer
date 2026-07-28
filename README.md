@@ -8,7 +8,6 @@
 точный шаг по кадрам, синхронное воспроизведение двух треков
 и насртройка таймлайнов относительно друг друга.
 
-[![Сборка](https://github.com/Visp1024/ComparisonVideoPlayer/actions/workflows/build.yml/badge.svg)](https://github.com/Visp1024/ComparisonVideoPlayer/actions/workflows/build.yml)
 [![Релиз](https://img.shields.io/github/v/release/Visp1024/ComparisonVideoPlayer?label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=2ea043)](https://github.com/Visp1024/ComparisonVideoPlayer/releases/latest)
 [![Лицензия MIT](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-blue)](LICENSE)
 
@@ -94,13 +93,23 @@ tools/make-installer.ps1          # то же плюс publish/installer/CVP-<в
 
 ### CI
 
-- **Сборка** (`.github/workflows/build.yml`) — на каждый push и pull request в `master`:
-  компиляция в Release и проверка публикации.
+Автоматически на push и pull request не запускается ничего — оба workflow
+стартуют по команде.
+
 - **Релиз** (`.github/workflows/release.yml`) — по тегу `v*`: скачивает FFmpeg,
-  собирает архив и инсталлятор и выкладывает их в релиз GitHub.
-  Версия берётся из тега, так что `git tag v1.1.0 && git push origin v1.1.0`
-  даёт `CVP-1.1.0-setup.exe`. Ручной запуск (workflow_dispatch) собирает то же
-  самое в артефакты прогона, не создавая релиза.
+  собирает архив и инсталлятор и выкладывает их в релиз GitHub. Тег ставит
+  `tools/release.ps1`: он берёт версию из `<Version>` в csproj, проверяет, что
+  ветка чистая и совпадает с origin, и отправляет тег.
+
+  ```powershell
+  tools/release.ps1                 # версия из csproj
+  tools/release.ps1 -Version 1.1.0  # явная версия
+  ```
+
+  Ручной запуск workflow (workflow_dispatch) собирает то же самое в артефакты
+  прогона, не создавая релиза.
+- **Сборка** (`.github/workflows/build.yml`) — только по кнопке: компиляция в
+  Release и проверка публикации, без FFmpeg и упаковки.
 
 ## Известные ограничения
 

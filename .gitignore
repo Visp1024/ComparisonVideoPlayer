@@ -5,3 +5,8 @@ tools/ffmpeg/
 publish/
 *.user
 .vs/
+# Рабочие документы и артефакты фаз в репозитории не хранятся — от docs остались
+# только картинки, на которые ссылается README.
+docs/*
+!docs/screenshot.png
+!docs/app-icon.svg
