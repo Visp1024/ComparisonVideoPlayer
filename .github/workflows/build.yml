@@ -1,0 +1,34 @@
+# Проверка сборки: компилируем плеер и прогоняем упаковочный скрипт без FFmpeg
+# (нативные библиотеки нужны только готовой поставке — см. tools/publish.ps1).
+name: Сборка
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: .NET 9 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Восстановление пакетов
+        run: dotnet restore src/ComparisonPlayer/ComparisonPlayer.csproj
+
+      - name: Сборка (Release)
+        run: dotnet build src/ComparisonPlayer/ComparisonPlayer.csproj -c Release --no-restore --nologo
+
+      # Публикация single-file — отдельный набор граблей (trimming, нативные
+      # библиотеки FlyleafLib), поэтому проверяем и её, а не только компиляцию.
+      - name: Проверка публикации
+        run: ./tools/publish.ps1 -NoFFmpeg -OutDir publish/ci

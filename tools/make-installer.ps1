@@ -10,6 +10,8 @@
         -SourceDir <путь>   явный каталог с собранным приложением
         -Iscc <путь>        явный путь к ISCC.exe, если он не в PATH и не в Program Files
         -FFmpegDir <путь>   каталог FFmpeg для билда (передаётся в publish.ps1)
+        -Version <x.y.z>    версия поставки для билда (передаётся в publish.ps1);
+                            с -SkipPublish версия всё равно берётся из готового exe
 
     Inno Setup 6 нужен отдельно: https://jrsoftware.org/isdl.php
     (или winget install JRSoftware.InnoSetup)
@@ -21,6 +23,7 @@ param(
     [string] $SourceDir     = '',
     [string] $OutDir        = '',
     [string] $FFmpegDir     = '',
+    [string] $Version       = '',
     [string] $Iscc          = '',
     [switch] $SkipPublish
 )
@@ -46,6 +49,7 @@ if ($SkipPublish) {
 else {
     $publishArgs = @{ Configuration = $Configuration; Runtime = $Runtime; OutDir = $SourceDir }
     if ($FFmpegDir) { $publishArgs['FFmpegDir'] = $FFmpegDir }
+    if ($Version)   { $publishArgs['Version']   = $Version }
     & (Join-Path $tools 'publish.ps1') @publishArgs
 }
 

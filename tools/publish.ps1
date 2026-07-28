@@ -13,6 +13,7 @@
         -NoFFmpeg             не копировать FFmpeg в билд
         -FFmpegDir <путь>     явный каталог с avcodec-*.dll и ffmpeg.exe
         -OutDir <путь>        куда класть результат
+        -Version <x.y.z>      версия поставки вместо указанной в csproj (её ставит CI из тега)
         -Zip                  дополнительно упаковать результат в переносимый архив
 
     Инсталлятор собирается отдельно: tools/make-installer.ps1 (Inno Setup).
@@ -23,6 +24,7 @@ param(
     [string] $Runtime       = 'win-x64',
     [string] $OutDir        = '',
     [string] $FFmpegDir     = '',
+    [string] $Version       = '',
     [switch] $FrameworkDependent,
     [switch] $NoSingleFile,
     [switch] $NoFFmpeg,
@@ -64,6 +66,8 @@ $publishArgs = @(
     '-o', $OutDir,
     '--nologo'
 )
+# Версия попадает в exe, а из неё — в имя архива и в инсталлятор.
+if ($Version) { $publishArgs += "-p:Version=$Version" }
 if (-not $NoSingleFile) {
     $publishArgs += @(
         '-p:PublishSingleFile=true',

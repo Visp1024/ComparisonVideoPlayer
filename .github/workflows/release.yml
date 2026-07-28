@@ -1,0 +1,119 @@
+# Сборка поставки CVP: переносимый архив и инсталлятор Inno Setup.
+#
+# Релиз выпускается тегом:  git tag v1.0.0 && git push origin v1.0.0
+# Ручной запуск (workflow_dispatch) собирает то же самое, но кладёт результат
+# в артефакты прогона и релиз не создаёт — удобно проверить сборку до тега.
+name: Релиз
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия поставки, например 1.0.0'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: .NET 9 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # Версия проставляется в exe при публикации, из неё же собираются имена
+      # архива и инсталлятора — тег v1.0.0 даёт CVP-1.0.0-win-x64.zip.
+      - name: Версия поставки
+        id: version
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $v = '${{ inputs.version }}'
+          } else {
+            $v = '${{ github.ref_name }}' -replace '^v', ''
+          }
+          if ($v -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { throw "версия не похожа на номер поставки: $v" }
+          "value=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "версия: $v"
+
+      # Тот же комплект FFmpeg (n7.1 win64 gpl shared), что плеер предлагает
+      # скачать сам — src/ComparisonPlayer/FFmpegInstaller.cs.
+      - name: FFmpeg (n7.1 win64 gpl shared)
+        run: |
+          $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'ffmpeg'
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          Expand-Archive -LiteralPath $zip -DestinationPath $dir -Force
+          $bin = Get-ChildItem -LiteralPath $dir -Directory -Recurse -Filter 'bin' | Select-Object -First 1
+          if (-not $bin) { throw "в архиве FFmpeg нет каталога bin: $url" }
+          New-Item -ItemType Directory -Path 'tools/ffmpeg' -Force | Out-Null
+          Move-Item -LiteralPath $bin.FullName -Destination 'tools/ffmpeg/bin'
+
+      # На образах GitHub Inno Setup обычно уже стоит; ставим только если его нет.
+      - name: Inno Setup 6
+        run: |
+          $iscc = @(
+            (Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source),
+            'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+            'C:\Program Files\Inno Setup 6\ISCC.exe'
+          ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+          if ($iscc) { Write-Host "Inno Setup уже есть: $($iscc[0])"; exit 0 }
+          choco install innosetup -y --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "не удалось установить Inno Setup (код $LASTEXITCODE)" }
+
+      - name: Переносимая поставка (архив)
+        run: ./tools/publish.ps1 -Version '${{ steps.version.outputs.value }}' -Zip
+
+      # -SkipPublish: билд уже собран прошлым шагом, версия берётся из его exe.
+      - name: Инсталлятор
+        run: ./tools/make-installer.ps1 -SkipPublish
+
+      - name: Проверка результата
+        run: |
+          $v = '${{ steps.version.outputs.value }}'
+          foreach ($f in @("publish/CVP-$v-win-x64.zip", "publish/installer/CVP-$v-setup.exe")) {
+            if (-not (Test-Path -LiteralPath $f)) { throw "нет ожидаемого файла поставки: $f" }
+            $mb = [math]::Round((Get-Item -LiteralPath $f).Length / 1MB, 1)
+            Write-Host ("{0} — {1} МБ" -f $f, $mb)
+          }
+
+      - name: Артефакты прогона
+        uses: actions/upload-artifact@v4
+        with:
+          name: CVP-${{ steps.version.outputs.value }}-win-x64
+          path: |
+            publish/CVP-${{ steps.version.outputs.value }}-win-x64.zip
+            publish/installer/CVP-${{ steps.version.outputs.value }}-setup.exe
+          if-no-files-found: error
+
+      - name: Релиз на GitHub
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = '${{ steps.version.outputs.value }}'
+          # Двойной обратный апостроф в строке PowerShell даёт один символ — то,
+          # что нужно markdown для кода. Массив вместо here-string: у here-string
+          # закрывающая строка обязана стоять в первой колонке, а здесь YAML.
+          $notes = @(
+            "**CVP $v** — Windows x64, FFmpeg (n7.1 gpl shared) уже внутри поставки."
+            ""
+            "- ``CVP-$v-setup.exe`` — установщик (ставится и без прав администратора)."
+            "- ``CVP-$v-win-x64.zip`` — переносимая версия: распаковать и запустить."
+            ""
+            "Рантайм .NET не требуется: сборка self-contained."
+          ) -join "`n"
+          gh release create '${{ github.ref_name }}' `
+            "publish/CVP-$v-win-x64.zip" `
+            "publish/installer/CVP-$v-setup.exe" `
+            --title "CVP $v" --notes $notes --generate-notes

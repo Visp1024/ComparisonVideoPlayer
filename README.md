@@ -8,6 +8,10 @@
 точный шаг по кадрам, синхронное воспроизведение двух треков
 и насртройка таймлайнов относительно друг друга.
 
+[![Сборка](https://github.com/Visp1024/ComparisonVideoPlayer/actions/workflows/build.yml/badge.svg)](https://github.com/Visp1024/ComparisonVideoPlayer/actions/workflows/build.yml)
+[![Релиз](https://img.shields.io/github/v/release/Visp1024/ComparisonVideoPlayer?label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=2ea043)](https://github.com/Visp1024/ComparisonVideoPlayer/releases/latest)
+[![Лицензия MIT](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-blue)](LICENSE)
+
 </div>
 
 ![Два трека, таймлайн и транспорт](docs/phase5-artifacts/two-tracks.png)
@@ -59,15 +63,44 @@
 
 ## Установка
 
-Готовый билд собирается из исходников (см. ниже) — как переносимая папка/архив
-или как инсталлятор Inno Setup. Требования к машине: **Windows x64**;
-для framework-dependent сборки дополнительно **.NET 9 Desktop Runtime**,
-self-contained билд рантайма не требует.
+Готовая поставка — на странице [релизов](https://github.com/Visp1024/ComparisonVideoPlayer/releases/latest),
+её собирает CI по тегу версии:
+
+- `CVP-<версия>-setup.exe` — инсталлятор (ставится и без прав администратора);
+- `CVP-<версия>-win-x64.zip` — переносимый вариант: распаковать и запустить.
+
+Требования к машине: **Windows x64**. Рантайм .NET ставить не нужно — поставка
+self-contained; FFmpeg тоже внутри.
 
 Плееру нужны нативные библиотеки FFmpeg (n7.1 win64 gpl shared) — в поставке они лежат
 в подкаталоге `FFmpeg` рядом с exe. Если их нет, при запуске плеер сам предложит скачать
 готовый комплект и положит его туда же; каталог можно задать и вручную — переменной
 окружения `COMPARISONPLAYER_FFMPEG_DIR`.
+
+## Сборка из исходников
+
+Нужен **.NET 9 SDK**; для инсталлятора дополнительно
+[Inno Setup 6](https://jrsoftware.org/isdl.php).
+
+```powershell
+tools/publish.ps1 -Zip            # publish/win-x64 плюс переносимый архив
+tools/make-installer.ps1          # то же плюс publish/installer/CVP-<версия>-setup.exe
+```
+
+Ключ `-FrameworkDependent` даёт сборку без рантайма внутри (тогда на машине нужен
+**.NET 9 Desktop Runtime**), `-Version` задаёт версию поставки. Библиотеки FFmpeg
+скрипт берёт из `tools/ffmpeg/bin`, `COMPARISONPLAYER_FFMPEG_DIR` или `C:\ffmpeg\bin`;
+без них соберётся только с ключом `-NoFFmpeg`.
+
+### CI
+
+- **Сборка** (`.github/workflows/build.yml`) — на каждый push и pull request в `master`:
+  компиляция в Release и проверка публикации.
+- **Релиз** (`.github/workflows/release.yml`) — по тегу `v*`: скачивает FFmpeg,
+  собирает архив и инсталлятор и выкладывает их в релиз GitHub.
+  Версия берётся из тега, так что `git tag v1.1.0 && git push origin v1.1.0`
+  даёт `CVP-1.1.0-setup.exe`. Ручной запуск (workflow_dispatch) собирает то же
+  самое в артефакты прогона, не создавая релиза.
 
 ## Известные ограничения
 
