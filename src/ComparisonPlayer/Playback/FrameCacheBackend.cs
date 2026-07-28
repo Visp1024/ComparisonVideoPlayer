@@ -16,10 +16,17 @@ namespace ComparisonPlayer.Playback;
 public sealed class FrameCacheBackend(FlyleafBackend inner, CacheEntry entry) : IPlaybackBackend
 {
     private MediaInfo? _media;
+    private long _available;
     private bool _disposed;
 
     /// <summary>Запись кэша, из которой идут кадры.</summary>
     public CacheEntry Entry => entry;
+
+    /// <summary>
+    /// Сколько кадров реально лежит в прокси на момент открытия. У готовой записи
+    /// это все кадры ролика, у собираемой — только уже записанная часть.
+    /// </summary>
+    public long AvailableFrames => _available;
 
     public MediaInfo? Media => _media;
     public bool IsOpen => _media is not null;
@@ -42,6 +49,7 @@ public sealed class FrameCacheBackend(FlyleafBackend inner, CacheEntry entry) : 
         if (!res.Success) return res;
 
         var proxy = inner.Media!;
+        _available = proxy.FrameCount;
 
         // Частоту, длительность и число кадров берём у прокси: он приведён к
         // постоянной частоте и может отличаться от исходника на кадр — транспорт
@@ -56,6 +64,22 @@ public sealed class FrameCacheBackend(FlyleafBackend inner, CacheEntry entry) : 
             FromCache = true
         };
 
+        // У собираемого прокси в файле пока меньше кадров, чем в ролике. Шкала и
+        // счётчик кадров обязаны показывать весь ролик, иначе они прыгали бы при
+        // каждом продлении кэша — поэтому длительность берём из записи.
+        if (entry.Partial && entry.FrameCount > _available)
+        {
+            _media = _media with
+            {
+                Fps = entry.Fps > 0 ? entry.Fps : _media.Fps,
+                FrameCount = entry.FrameCount,
+                Duration = entry.Duration
+            };
+        }
+
+        // Открыть могут и повторно — растущий прокси перечитывают, чтобы увидеть
+        // дописанные кадры; двойной подписки на события при этом быть не должно.
+        Detach();
         inner.PositionChanged += OnPositionChanged;
         inner.StateChanged += OnStateChanged;
 
@@ -63,6 +87,12 @@ public sealed class FrameCacheBackend(FlyleafBackend inner, CacheEntry entry) : 
         PositionChanged?.Invoke(this, EventArgs.Empty);
         return OpenResult.Ok();
     }
+
+    /// <summary>
+    /// Перечитать растущий прокси: пока идёт сборка, дописанные кадры появляются
+    /// в файле, но открытый демуксер о них не знает. Позицию восстанавливает вызывающий.
+    /// </summary>
+    public OpenResult Reopen() => Open(entry.SourcePath);
 
     public void Close()
     {

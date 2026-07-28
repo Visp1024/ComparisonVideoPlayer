@@ -47,6 +47,24 @@ public partial class MainWindow
 
     private double _buildPercent;
 
+    /// <summary>Оценка оставшегося времени сборки для индикатора; пусто — оценки нет.</summary>
+    private string _buildEta = "";
+
+    /// <summary>Какая доля ролика уже в кэше: по ней рисуются и полоса готовности, и лента кадров.</summary>
+    private double _builtFraction;
+
+    /// <summary>Сколько кадров прокси уже записано ffmpeg'ом; 0 — сборки нет.</summary>
+    private long _builtFrames;
+
+    /// <summary>
+    /// Минимальный задел, при котором есть смысл переходить на собираемый кэш:
+    /// хвост у края собранной части всё равно упрётся в исходник.
+    /// </summary>
+    private const long PartialHeadStart = 90;
+
+    /// <summary>На столько кадров кэш должен убежать вперёд, чтобы его стоило перечитывать.</summary>
+    private const long PartialRefreshStep = 150;
+
     /// <summary>Переключатели режима расставляет код — реагировать на это не нужно.</summary>
     private bool _syncingCacheUi;
 
@@ -102,6 +120,8 @@ public partial class MainWindow
         _sourceStepMs = 0;
         _cacheStepMs = 0;
         _buildPercent = 0;
+        _builtFrames = 0;
+        _builtFraction = 0;
 
         ClearThumbnails();
         ShowBuildBar(false);
@@ -207,6 +227,7 @@ public partial class MainWindow
         _buildPercent = 0;
 
         ShowBuildBar(true);
+        ShowThumbnails([]);   // полоска появляется сразу и заполняется по мере сборки
         UpdateModeBadge();
         UpdateCachePanel();
 
@@ -221,20 +242,22 @@ public partial class MainWindow
     {
         _buildPercent = progress.Percent;
 
-        BuildTitle.Text = progress.Stage == BuildStage.Proxy ? "Строится кэш кадров" : "Строятся миниатюры";
-        BuildProgressBar.Value = progress.Percent;
-        BuildPercent.Text = $"{progress.Percent:F0} %";
-        BuildEta.Text = progress.Eta > TimeSpan.Zero ? $"~{Eta(progress.Eta)}" : "";
+        // Ход сборки показывает одна полоса под шкалой — она же говорит, докуда
+        // кэш уже готов. Проценты и оставшееся время идут в индикатор режима.
+        _builtFraction = Math.Clamp(progress.Percent / 100.0, 0, 1);
+        BuiltLine.Visibility = Visibility.Visible;
+        BuiltFill.Width = BuiltLine.ActualWidth * _builtFraction;
 
-        BuildTitle.ToolTip = $"{progress.Frame} / {progress.Total} кадров" +
-                             (progress.Speed > 0 ? $" · {progress.Speed:F2}× реального времени" : "");
+        _buildEta = progress.Eta > TimeSpan.Zero ? Eta(progress.Eta) : "";
 
-        // Собранная часть на отдельной полосе под шкалой: видно, докуда шаг уже будет мгновенным.
-        BuiltLine.Visibility = progress.Stage == BuildStage.Proxy ? Visibility.Visible : Visibility.Collapsed;
-        BuiltFill.Width = BuiltLine.ActualWidth * Math.Clamp(progress.Percent / 100.0, 0, 1);
+        ModeBadge.ToolTip =
+            $"{progress.Frame} / {progress.Total} кадров" +
+            (progress.Eta > TimeSpan.Zero ? $" · осталось ~{Eta(progress.Eta)}" : "") +
+            (progress.Speed > 0 ? $" · {progress.Speed:F2}× реального времени" : "");
 
-        // Миниатюры показываем по мере появления; последний файл может быть ещё недописан.
-        if (progress.Stage == BuildStage.Thumbnails && _cacheKey is { } key)
+        // Миниатюры строятся параллельно с прокси и показываются по мере появления;
+        // последний файл может быть ещё недописан, поэтому его пропускаем.
+        if (_cacheKey is { } key)
         {
             var dir = Path.Combine(_cacheStore.DirectoryFor(key), "thumbs");
             if (Directory.Exists(dir))
@@ -245,7 +268,99 @@ public partial class MainWindow
             }
         }
 
+        if (progress.Stage == BuildStage.Proxy)
+        {
+            _builtFrames = progress.Frame;
+            FollowPartialCache();
+        }
+
         UpdateModeBadge();
+    }
+
+    /// <summary>
+    /// Подхватить собираемый кэш, не дожидаясь конца сборки: как только записанная
+    /// часть прокси накрывает текущую позицию, играем из неё, а по мере роста файла
+    /// перечитываем его. Пока задел не набран — остаёмся на исходнике.
+    /// </summary>
+    private void FollowPartialCache()
+    {
+        if (_buildCts is null || _cacheKey is null || !_backend.IsOpen) return;
+
+        if (_backend is FrameCacheBackend cache)
+        {
+            if (!cache.Entry.Partial) return;
+
+            // Перечитывать растущий файл просто так нельзя: открытие сбрасывает
+            // позицию, и на паузе playhead прилипал бы к краю собранного. Делаем
+            // это только при воспроизведении, когда до края осталось немного, —
+            // на паузе кадр за краем запросит сам пользователь (см. SeekFrame).
+            if (!_backend.IsPlaying) return;
+            if (_backend.FrameIndex < cache.AvailableFrames - PartialRefreshStep) return;
+            if (_builtFrames <= cache.AvailableFrames) return;
+
+            // Воспроизведение обгоняет сборку — дальше кадров нет, играем с исходника.
+            if (ExtendPartialCache(cache) <= _backend.FrameIndex + PartialRefreshStep / 2)
+                PlayFromSource("воспроизведение обогнало сборку кэша — играю с исходника");
+
+            return;
+        }
+
+        if (_builtFrames < PartialHeadStart) return;
+        if (_backend.FrameIndex >= _builtFrames - PartialHeadStart / 2) return;
+
+        var entry = PartialEntry();
+        if (entry is null || !File.Exists(entry.ProxyPath)) return;
+
+        UseCacheBackend(entry, $"играю из собираемого кэша — готово {_buildPercent:F0} %");
+    }
+
+    /// <summary>
+    /// Перечитать растущий прокси, сохранив позицию и состояние воспроизведения:
+    /// после этого доступны все кадры, дописанные с момента открытия.
+    /// </summary>
+    /// <returns>Сколько кадров стало доступно.</returns>
+    private long ExtendPartialCache(FrameCacheBackend cache)
+    {
+        var frame = _backend.FrameIndex;
+        var playing = _backend.IsPlaying;
+
+        if (!cache.Reopen().Success) return cache.AvailableFrames;
+
+        _backend.SeekToFrame(frame);
+        if (playing) _backend.Play();
+
+        UpdateState();
+        return cache.AvailableFrames;
+    }
+
+    /// <summary>
+    /// Описание ещё не готовой записи: файл прокси уже растёт, а entry.json появится
+    /// только в конце сборки, поэтому на диск такая запись не сохраняется.
+    /// </summary>
+    private CacheEntry? PartialEntry()
+    {
+        if (_cacheKey is not { } key || _flyleaf.Media is not { } media) return null;
+
+        var fps = App.Settings.CacheFps > 0 ? App.Settings.CacheFps : media.Fps;
+        var frames = fps > 0 && media.Duration > TimeSpan.Zero
+            ? (long)Math.Round(media.Duration.TotalSeconds * fps)
+            : media.FrameCount;
+
+        return new CacheEntry
+        {
+            Key = key,
+            Directory = _cacheStore.DirectoryFor(key),
+            SourcePath = media.FilePath,
+            Codec = media.Codec,
+            Width = media.Width,
+            Height = media.Height,
+            SourceFps = media.Fps,
+            Fps = fps,
+            FrameCount = Math.Max(frames, 1),
+            DurationTicks = media.Duration.Ticks,
+            ProxyFile = ProxyCacheBuilder.ProxyFile,
+            Partial = true
+        };
     }
 
     private void OnBuildFinished(Task<CacheEntry> task, string key, CancellationTokenSource cts)
@@ -263,7 +378,7 @@ public partial class MainWindow
         {
             if (current)
             {
-                Status("сборка кэша отменена — играю с исходника");
+                DropPartialCache(key, "сборка кэша отменена — играю с исходника");
                 UpdateModeBadge();
                 UpdateCachePanel();
             }
@@ -275,7 +390,7 @@ public partial class MainWindow
             var message = task.Exception?.InnerException?.Message ?? "неизвестная ошибка";
             if (current)
             {
-                Status($"кэш не собрался: {message}");
+                DropPartialCache(key, $"кэш не собрался: {message}");
                 UpdateModeBadge();
                 UpdateCachePanel();
             }
@@ -292,6 +407,20 @@ public partial class MainWindow
     }
 
     private void CancelBuild() => _buildCts?.Cancel();
+
+    /// <summary>
+    /// Сборка не дошла до конца: играть из обрубка нельзя, и держать его на диске
+    /// незачем — целиком он всё равно не переиспользуется (entry.json не записан).
+    /// </summary>
+    private void DropPartialCache(string key, string message)
+    {
+        _builtFrames = 0;
+
+        if (_backend is FrameCacheBackend { Entry.Partial: true }) PlayFromSource(message);
+        else Status(message);
+
+        _cacheStore.Remove(key);
+    }
 
     // ---------- переключение движка ----------
 
@@ -330,17 +459,30 @@ public partial class MainWindow
 
         _backend = cache;
         Subscribe(_backend);
-        _cacheEntry = entry;
-        _cacheStore.Touch(entry);
+
+        // Незаконченную запись не отмечаем использованной: Touch сохранил бы
+        // entry.json, и полусобранный прокси стал бы выглядеть готовым.
+        if (!entry.Partial)
+        {
+            _cacheEntry = entry;
+            _cacheStore.Touch(entry);
+        }
 
         _backend.SeekToFrame(frame);
         if (wasPlaying) _backend.Play();
 
-        // На прокси шаг назад стоит миллисекунды — замер честный и почти бесплатный.
-        _cacheStepMs = StepSpeedProbe.Measure(_backend, _backend.Media!);
-        _backend.SeekToFrame(frame);
+        if (!entry.Partial)
+        {
+            // На прокси шаг назад стоит миллисекунды — замер честный и почти бесплатный.
+            _cacheStepMs = StepSpeedProbe.Measure(_backend, _backend.Media!);
+            _backend.SeekToFrame(frame);
+        }
 
-        ShowThumbnails(entry.ThumbnailFiles());
+        if (!entry.Partial)
+        {
+            _builtFraction = 1;
+            ShowThumbnails(entry.ThumbnailFiles());
+        }
         UpdateState();
         UpdateModeBadge();
         UpdateCachePanel();
@@ -515,6 +657,7 @@ public partial class MainWindow
         if (!_backend.IsOpen || _backend.Media is not { } media) return;
 
         var frame = _backend.FrameIndex;
+        var playing = _backend.IsPlaying;
         var source = media.FilePath;
 
         UseDirectBackend();
@@ -527,6 +670,7 @@ public partial class MainWindow
         }
 
         _flyleaf.SeekToFrame(frame);
+        if (playing) _flyleaf.Play();
         UpdateState();
         UpdateModeBadge();
         Status(message);
@@ -534,14 +678,18 @@ public partial class MainWindow
 
     // ---------- индикаторы ----------
 
+    /// <summary>
+    /// Признаки идущей сборки: кнопка отмены рядом с индикатором режима и полоса
+    /// готовности под шкалой. Отдельной строки прогресса нет — она дублировала полосу.
+    /// </summary>
     private void ShowBuildBar(bool visible)
     {
-        BuildBar.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        BtnBuildCancel.IsEnabled = visible;
+        BtnBuildCancel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
 
         if (visible) return;
 
-        BuildProgressBar.Value = 0;
+        _buildEta = "";
+        ModeBadge.ToolTip = null;
         BuiltLine.Visibility = Visibility.Collapsed;
         BuiltFill.Width = 0;
     }
@@ -556,9 +704,15 @@ public partial class MainWindow
             text = "файл не открыт";
             brush = "MutedBrush";
         }
+        else if (_buildCts is not null && _backend.Media is { FromCache: true })
+        {
+            // Уже играем из кэша, хотя он ещё достраивается.
+            text = $"кэш · сборка {_buildPercent:F0} %{Remaining()}";
+            brush = "OkBrush";
+        }
         else if (_buildCts is not null)
         {
-            text = $"сборка кэша {_buildPercent:F0} %";
+            text = $"сборка кэша {_buildPercent:F0} %{Remaining()}";
             brush = "AccentBrush";
         }
         else if (_backend.Media is { FromCache: true })
@@ -606,6 +760,7 @@ public partial class MainWindow
         var fromCache = _backend.Media is { FromCache: true };
 
         CacheFileMode.Text = !open ? "—"
+            : _buildCts is not null && fromCache ? "кэш, идёт сборка"
             : _buildCts is not null ? "сборка"
             : fromCache ? "кэш"
             : "прямой декод";
@@ -633,6 +788,10 @@ public partial class MainWindow
 
     // ---------- миниатюры ----------
 
+    /// <summary>
+    /// Показать полоску с теми миниатюрами, что уже сняты. Пустой список — это тоже
+    /// полоска: во время сборки она видна сразу и заполняется слева направо.
+    /// </summary>
     private void ShowThumbnails(IReadOnlyList<string> files)
     {
         _thumbFiles = files;
@@ -640,41 +799,58 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Раскладка полоски: миниатюр может быть больше, чем влезает по ширине,
-    /// поэтому берём равномерную выборку — по одной на клетку в ширину кадра.
-    /// Пересчитывается при изменении размера окна.
+    /// Раскладка полоски: клетки покрывают весь ролик, и каждая показывает кадр
+    /// своего места на шкале времени. Пока кэш собирается, кадры есть только слева —
+    /// правые клетки остаются пустыми и заполняются по мере сборки.
     /// </summary>
     private void LayoutThumbnails()
     {
-        if (_thumbFiles.Count == 0)
+        if (_backend.Media is not { } media || media.Duration <= TimeSpan.Zero || _thumbFiles.Count == 0)
         {
-            ClearThumbnails();
+            ThumbStrip.Children.Clear();
+            ThumbStripBox.Width = 0;
+            _thumbShown = 0;
+            _thumbSource = 0;
+
+            // Во время сборки место под полоску уже занято: она вот-вот появится.
+            ThumbStripArea.Visibility = _buildCts is not null ? Visibility.Visible : Visibility.Collapsed;
             return;
         }
 
-        ThumbStripBox.Visibility = Visibility.Visible;
+        ThumbStripArea.Visibility = Visibility.Visible;
 
-        var height = ThumbStripBox.ActualHeight > 2 ? ThumbStripBox.ActualHeight - 2 : 44;
-        var aspect = _backend.Media is { Height: > 0 } m ? m.Width / (double)m.Height : 16 / 9.0;
-        var width = Math.Max(height * aspect, 1);
+        var (planned, interval) = ProxyCacheBuilder.ThumbnailPlan(media.Duration, media.FrameCount);
+        if (planned == 0 || interval <= 0) return;
 
-        var fit = Math.Max((int)(ThumbStripBox.ActualWidth / width), 1);
-        var take = Math.Min(fit, _thumbFiles.Count);
+        // Полоска кончается там же, где зелёная полоса готовности: её ширина и есть
+        // ответ на вопрос «сколько ролика уже в кэше».
+        var full = ThumbStripArea.ActualWidth;
+        var covered = Math.Clamp(_builtFraction, 0, 1);
+        var width = Math.Floor(full * covered);
+        ThumbStripBox.Width = width;
+
+        var height = ThumbStripArea.ActualHeight > 2 ? ThumbStripArea.ActualHeight - 2 : 44;
+        var aspect = media.Height > 0 ? media.Width / (double)media.Height : 16 / 9.0;
+        var cellWidth = Math.Max(height * aspect, 1);
+
+        var cells = Math.Max((int)Math.Round(width / cellWidth), 1);
 
         // Ни ширина, ни набор файлов не изменились — перекладывать нечего.
-        if (take == _thumbShown && _thumbFiles.Count == _thumbSource) return;
+        if (cells == _thumbShown && _thumbFiles.Count == _thumbSource) return;
+        _thumbShown = cells;
         _thumbSource = _thumbFiles.Count;
 
-        ThumbStrip.Columns = take;
+        ThumbStrip.Columns = cells;
         ThumbStrip.Children.Clear();
 
-        for (var i = 0; i < take; i++)
+        for (var i = 0; i < cells; i++)
         {
-            // Середина i-й доли ролика: полоска остаётся равномерной при любом числе клеток.
-            var index = (int)((i + 0.5) * _thumbFiles.Count / take);
-            index = Math.Clamp(index, 0, _thumbFiles.Count - 1);
+            // Время середины клетки в пределах собранной части → снятый там кадр.
+            var time = (i + 0.5) / cells * covered * media.Duration.TotalSeconds;
+            var index = Math.Clamp((int)(time / interval), 0, Math.Min(planned, _thumbFiles.Count) - 1);
 
-            if (LoadThumbnail(_thumbFiles[index]) is not { } source) continue;
+            var source = index >= 0 && index < _thumbFiles.Count ? LoadThumbnail(_thumbFiles[index]) : null;
+            if (source is null) continue;
 
             ThumbStrip.Children.Add(new Image
             {
@@ -684,7 +860,6 @@ public partial class MainWindow
             });
         }
 
-        _thumbShown = take;
         UpdateThumbHead();
     }
 
@@ -692,9 +867,11 @@ public partial class MainWindow
     {
         _thumbFiles = [];
         _thumbShown = 0;
+        _thumbSource = 0;
         _thumbCache.Clear();
         ThumbStrip.Children.Clear();
-        ThumbStripBox.Visibility = Visibility.Collapsed;
+        ThumbStripBox.Width = 0;
+        ThumbStripArea.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>
@@ -727,7 +904,7 @@ public partial class MainWindow
 
     private void UpdateThumbHead()
     {
-        if (ThumbStripBox.Visibility != Visibility.Visible) return;
+        if (ThumbStripArea.Visibility != Visibility.Visible) return;
         if (_backend.Media is not { } media || media.FrameCount <= 1) return;
 
         SetThumbHead(_backend.FrameIndex / (double)(media.FrameCount - 1));
@@ -735,7 +912,7 @@ public partial class MainWindow
 
     private void SetThumbHead(double ratio)
     {
-        var offset = Math.Clamp(ratio, 0, 1) * Math.Max(ThumbStripBox.ActualWidth - ThumbHead.Width, 0);
+        var offset = Math.Clamp(ratio, 0, 1) * Math.Max(ThumbStripArea.ActualWidth - ThumbHead.Width, 0);
         ThumbHead.Margin = new Thickness(offset, 0, 0, 0);
     }
 
@@ -748,15 +925,15 @@ public partial class MainWindow
     /// <summary>По полоске миниатюр можно и щёлкать, и вести playhead перетаскиванием.</summary>
     private void ThumbStrip_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        ThumbStripBox.CaptureMouse();
+        ThumbStripArea.CaptureMouse();
         _thumbDragging = true;
-        SeekToStripPoint(e.GetPosition(ThumbStripBox).X);
+        SeekToStripPoint(e.GetPosition(ThumbStripArea).X);
     }
 
     private void ThumbStrip_MouseMove(object sender, MouseEventArgs e)
     {
         if (!_thumbDragging || e.LeftButton != MouseButtonState.Pressed) return;
-        SeekToStripPoint(e.GetPosition(ThumbStripBox).X);
+        SeekToStripPoint(e.GetPosition(ThumbStripArea).X);
     }
 
     private void ThumbStrip_MouseUp(object sender, MouseButtonEventArgs e)
@@ -764,19 +941,20 @@ public partial class MainWindow
         if (!_thumbDragging) return;
 
         _thumbDragging = false;
-        ThumbStripBox.ReleaseMouseCapture();
+        ThumbStripArea.ReleaseMouseCapture();
 
         // На медленном источнике во время перетаскивания кадр не декодировался —
         // показываем его теперь, по отпусканию кнопки.
-        if (!LiveScrub) SeekToStripPoint(e.GetPosition(ThumbStripBox).X, force: true);
+        if (!LiveScrub) SeekToStripPoint(e.GetPosition(ThumbStripArea).X, force: true);
     }
 
     private void SeekToStripPoint(double x, bool force = false)
     {
-        if (_backend.Media is not { } media || ThumbStripBox.ActualWidth <= 0) return;
+        if (_backend.Media is not { } media || ThumbStripArea.ActualWidth <= 0) return;
 
-        var ratio = Math.Clamp(x / ThumbStripBox.ActualWidth, 0, 1);
+        var ratio = Math.Clamp(x / ThumbStripArea.ActualWidth, 0, 1);
         var frame = (long)Math.Round(ratio * Math.Max(media.FrameCount - 1, 0));
+
 
         if (force || LiveScrub)
         {
@@ -790,6 +968,8 @@ public partial class MainWindow
     }
 
     // ---------- форматирование ----------
+
+    private string Remaining() => _buildEta.Length > 0 ? $" · ~{_buildEta}" : "";
 
     private static string FpsName(double fps) =>
         fps > 0 ? $"{fps.ToString("0.###", CultureInfo.InvariantCulture)} кадров/с" : "как в исходнике";

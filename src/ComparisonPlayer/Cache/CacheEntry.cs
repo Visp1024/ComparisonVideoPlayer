@@ -49,6 +49,13 @@ public sealed class CacheEntry
     /// <summary>Папка записи. В entry.json не пишется — она и есть эта папка.</summary>
     [JsonIgnore] public string Directory { get; set; } = "";
 
+    /// <summary>
+    /// Запись описывает ещё собираемый прокси: файл растёт, кадров в нём меньше,
+    /// чем <see cref="FrameCount"/>. На диск такая запись не сохраняется — её
+    /// собирает окно, чтобы играть кэш, не дожидаясь конца сборки.
+    /// </summary>
+    [JsonIgnore] public bool Partial { get; set; }
+
     [JsonIgnore] public string ProxyPath => Path.Combine(Directory, ProxyFile);
     [JsonIgnore] public string ThumbnailDirectory => Path.Combine(Directory, "thumbs");
     [JsonIgnore] public TimeSpan Duration => TimeSpan.FromTicks(DurationTicks);

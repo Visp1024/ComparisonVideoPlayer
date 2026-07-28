@@ -40,6 +40,9 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
     public static string Signature(double fps) =>
         fps > 0 ? $"{Version}-fps{fps.ToString("0.###", CultureInfo.InvariantCulture)}" : Version;
 
+    /// <summary>Имя файла прокси внутри папки записи.</summary>
+    public const string ProxyFile = "proxy.mp4";
+
     private const int Crf = 20;
     private const int ThumbnailHeight = 72;
     private const int MinThumbnails = 12;
@@ -59,16 +62,30 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
         var dir = store.DirectoryFor(key);
         Directory.CreateDirectory(dir);
 
-        var partial = Path.Combine(dir, "proxy.part.mp4");
-        var final = Path.Combine(dir, "proxy.mp4");
-        SafeDelete(partial);
+        // Прокси пишется сразу под своим именем, без временного файла и переименования:
+        // плеер играет его прямо во время сборки и держит открытым, а переименовать
+        // занятый файл нельзя. Признак готовности — entry.json, он появляется в конце.
+        var proxy = Path.Combine(dir, ProxyFile);
+        SafeDelete(Path.Combine(dir, "entry.json"));
 
         var fps = targetFps > 0 ? targetFps : media.Fps;
         var totalFrames = ExpectedFrames(media, fps);
-        await RunAsync(ProxyArgs(media, fps, partial), totalFrames, BuildStage.Proxy, progress, ct);
 
-        SafeDelete(final);
-        File.Move(partial, final);
+        // Миниатюры идут параллельно и снимаются с исходника: полоска кадров
+        // должна появиться в первые секунды, а не через минуту после прокси.
+        var thumbnails = withThumbnails
+            ? BuildThumbnailsAsync(media, totalFrames, dir, ct)
+            : Task.FromResult((0, 0.0));
+
+        try
+        {
+            await RunAsync(ProxyArgs(media, fps, proxy), totalFrames, BuildStage.Proxy, progress, ct);
+        }
+        catch (Exception)
+        {
+            await Ignore(thumbnails);
+            throw;
+        }
 
         var entry = new CacheEntry
         {
@@ -88,15 +105,35 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
             LastUsedUtc = DateTime.UtcNow
         };
 
-        if (withThumbnails)
-        {
-            var (count, interval) = await BuildThumbnailsAsync(final, media, totalFrames, dir, progress, ct);
-            entry.ThumbnailCount = count;
-            entry.ThumbnailIntervalSeconds = interval;
-        }
+        var (count, interval) = await thumbnails;
+        entry.ThumbnailCount = count;
+        entry.ThumbnailIntervalSeconds = interval;
 
         store.Save(entry);
         return entry;
+    }
+
+    /// <summary>Дождаться побочной задачи, не подменяя ею исходную ошибку.</summary>
+    private static async Task Ignore(Task task)
+    {
+        try { await task; }
+        catch (Exception) { /* прокси уже упал или отменён — судьба миниатюр не важна */ }
+    }
+
+    /// <summary>
+    /// Сколько миниатюр снимаем и с каким шагом по времени. Считается и при сборке,
+    /// и при показе: полоска раскладывает кадры по их местам на шкале времени, а не
+    /// растягивает готовые на всю ширину — иначе во время сборки она врала бы о том,
+    /// какой кусок ролика уже разобран.
+    /// </summary>
+    public static (int Count, double Interval) ThumbnailPlan(TimeSpan duration, long frames)
+    {
+        var seconds = duration.TotalSeconds;
+        if (seconds <= 0) return (0, 0);
+
+        var count = (int)Math.Clamp(Math.Round(seconds / 2), MinThumbnails, MaxThumbnails);
+        count = (int)Math.Min(count, Math.Max(frames, 1));
+        return (count, seconds / count);
     }
 
     /// <summary>Сколько кадров окажется в прокси при заданной частоте.</summary>
@@ -119,40 +156,40 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
             ? $" -r {fps.ToString("0.######", CultureInfo.InvariantCulture)}"
             : "";
 
+        // Фрагментированный MP4 (frag_keyframe + empty_moov): файл читается ещё
+        // до окончания записи, поэтому плеер играет уже собранную часть кэша.
+        // Обычный MP4 дописывает оглавление в конце и до этого непригоден.
         return $"-hide_banner -nostdin -loglevel error -y -i \"{media.FilePath}\" " +
                $"-map 0:v:0 -an -sn -dn " +
                $"-c:v libx264 -preset veryfast -crf {Crf} " +
                $"-g 1 -keyint_min 1 -sc_threshold 0 -bf 0 " +
                $"-pix_fmt yuv420p -fps_mode cfr{rate} " +
-               $"-movflags +faststart -progress pipe:1 -nostats \"{output}\"";
+               $"-movflags +frag_keyframe+empty_moov+default_base_moof -frag_duration 1000000 " +
+               $"-progress pipe:1 -nostats \"{output}\"";
     }
 
     /// <summary>
-    /// Миниатюры снимаются с готового прокси, а не с исходника: all-intra декодируется
-    /// заметно быстрее, а картинка та же. Кадров берём столько, чтобы хватило на ширину
-    /// полосы и не больше — секундный шаг на часовом ролике дал бы 3600 файлов.
+    /// Миниатюры снимаются с исходника параллельно со сборкой прокси: полоска кадров
+    /// нужна сразу, а ждать готового прокси — это минуты на длинном ролике. Кадров
+    /// берём столько, чтобы хватило на ширину полосы и не больше — секундный шаг
+    /// на часовом ролике дал бы 3600 файлов.
     /// </summary>
     private async Task<(int Count, double Interval)> BuildThumbnailsAsync(
-        string proxy, MediaInfo media, long proxyFrames, string dir,
-        IProgress<BuildProgress>? progress, CancellationToken ct)
+        MediaInfo media, long proxyFrames, string dir, CancellationToken ct)
     {
-        var seconds = media.Duration.TotalSeconds;
-        if (seconds <= 0) return (0, 0);
-
-        var count = (int)Math.Clamp(Math.Round(seconds / 2), MinThumbnails, MaxThumbnails);
-        count = (int)Math.Min(count, Math.Max(proxyFrames, 1));
-        var interval = seconds / count;
+        var (count, interval) = ThumbnailPlan(media.Duration, proxyFrames);
+        if (count == 0) return (0, 0);
 
         var thumbs = Path.Combine(dir, "thumbs");
         if (Directory.Exists(thumbs)) Directory.Delete(thumbs, recursive: true);
         Directory.CreateDirectory(thumbs);
 
         var fps = (1 / interval).ToString("0.######", CultureInfo.InvariantCulture);
-        var args = $"-hide_banner -nostdin -loglevel error -y -i \"{proxy}\" " +
-                   $"-vf \"fps={fps},scale=-2:{ThumbnailHeight}\" -q:v 4 " +
+        var args = $"-hide_banner -nostdin -loglevel error -y -i \"{media.FilePath}\" " +
+                   $"-map 0:v:0 -vf \"fps={fps},scale=-2:{ThumbnailHeight}\" -q:v 4 " +
                    $"-progress pipe:1 -nostats \"{Path.Combine(thumbs, "%05d.jpg")}\"";
 
-        await RunAsync(args, count, BuildStage.Thumbnails, progress, ct);
+        await RunAsync(args, count, BuildStage.Thumbnails, null, ct);
 
         return (Directory.GetFiles(thumbs, "*.jpg").Length, interval);
     }

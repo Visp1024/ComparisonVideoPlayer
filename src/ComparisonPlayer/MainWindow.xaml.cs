@@ -114,7 +114,7 @@ public partial class MainWindow : Window
     private void PlayPause_Click(object sender, RoutedEventArgs e) => _backend.TogglePlayPause();
     private void StepNext_Click(object sender, RoutedEventArgs e) => _backend.StepForward();
     private void StepPrev_Click(object sender, RoutedEventArgs e) => _backend.StepBack();
-    private void ToStart_Click(object sender, RoutedEventArgs e) => _backend.SeekToFrame(0);
+    private void ToStart_Click(object sender, RoutedEventArgs e) => SeekFrame(0);
     private void Info_Click(object sender, RoutedEventArgs e) => ToggleInfoPanel();
 
     /// <summary>
@@ -145,8 +145,8 @@ public partial class MainWindow : Window
             case Key.Space: _backend.TogglePlayPause(); return true;
             case Key.Right: _backend.StepForward(step); return true;
             case Key.Left: _backend.StepBack(step); return true;
-            case Key.Home: _backend.SeekToFrame(0); return true;
-            case Key.End when _backend.Media is { } m: _backend.SeekToFrame(m.FrameCount - 1); return true;
+            case Key.Home: SeekFrame(0); return true;
+            case Key.End when _backend.Media is { } m: SeekFrame(m.FrameCount - 1); return true;
             case Key.T: ToggleOverlay(); return true;
             case Key.I: ToggleInfoPanel(); return true;
             case Key.C: ToggleCachePanel(); return true;
@@ -281,7 +281,7 @@ public partial class MainWindow : Window
     {
         if (!_scrubbing) return;
         _scrubbing = false;
-        if (_backend.IsOpen) _backend.SeekToFrame((long)Scrub.Value);
+        if (_backend.IsOpen) SeekFrame((long)Scrub.Value);
     }
 
     private void Scrub_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -290,7 +290,7 @@ public partial class MainWindow : Window
 
         if (!_scrubbing)
         {
-            _backend.SeekToFrame((long)Scrub.Value);
+            SeekFrame((long)Scrub.Value);
             return;
         }
 
@@ -327,8 +327,26 @@ public partial class MainWindow : Window
         if (_seeking) return;
 
         _seeking = true;
-        try { _backend.SeekToFrame(frame); }
+        try { SeekFrame(frame); }
         finally { _seeking = false; }
+    }
+
+    /// <summary>
+    /// Единственный переход на кадр из интерфейса. Кроме собственно seek следит
+    /// за границей собираемого кэша: за ней кадров ещё нет, и играть приходится
+    /// с исходника, пока сборка туда не дойдёт.
+    /// </summary>
+    private void SeekFrame(long frame)
+    {
+        if (_backend is FrameCacheBackend { Entry.Partial: true } cache && frame >= cache.AvailableFrames)
+        {
+            // Может статься, что кадр уже дописан — перечитываем файл, и только
+            // если его действительно ещё нет, возвращаемся на исходник.
+            if (frame >= ExtendPartialCache(cache))
+                PlayFromSource($"кадр {frame} ещё не в кэше — играю с исходника");
+        }
+
+        _backend.SeekToFrame(frame);
     }
 
     // ---------- обновление интерфейса ----------
