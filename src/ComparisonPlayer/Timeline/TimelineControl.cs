@@ -196,8 +196,16 @@ public sealed class TimelineControl : FrameworkElement
     /// </summary>
     public void SetTracks(IReadOnlyList<TimelineTrackView> tracks, long timelineFrames, double masterFps)
     {
+        // Число дорожек задаёт высоту контрола (см. MeasureOverride), поэтому его смена —
+        // это смена раскладки, а не только рисунка. Без InvalidateMeasure высота остаётся
+        // посчитанной по прежнему числу дорожек, и вторая уходит за край отсечения:
+        // в неразвёрнутом окне второго таймлайна просто не было видно (задача #27).
+        var trackCountChanged = tracks.Count != _tracks.Count;
+
         _tracks = tracks;
         _masterFps = masterFps;
+
+        if (trackCountChanged) InvalidateMeasure();
 
         var open = tracks.Where(t => t.IsOpen).ToList();
         var key = string.Join("|", open.Select(t => $"{t.Letter}:{t.EndFrame - t.StartFrame}")) + $"|{masterFps:F6}";
