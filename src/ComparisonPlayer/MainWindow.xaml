@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:fl="clr-namespace:FlyleafLib.Controls.WPF;assembly=FlyleafLib"
         xmlns:tl="clr-namespace:ComparisonPlayer.Timeline"
-        Title="ComparisonVideoPlayer" Height="760" Width="1240"
+        Title="ComparisonVideoPlayer" Icon="app.ico" Height="760" Width="1240"
         MinHeight="480" MinWidth="900"
         Background="{StaticResource PanelBrush}"
         Foreground="{StaticResource TextBrush}"

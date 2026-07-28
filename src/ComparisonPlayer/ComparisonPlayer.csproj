@@ -12,10 +12,17 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>ComparisonPlayer</AssemblyName>
     <RootNamespace>ComparisonPlayer</RootNamespace>
+    <!-- Иконка exe; генерируется из docs/app-icon.svg через tools/make-app-icon.ps1 -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="FlyleafLib" Version="3.10.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Та же иконка как ресурс — для заголовка окна и панели задач -->
+    <Resource Include="app.ico" />
   </ItemGroup>
 
 </Project>
