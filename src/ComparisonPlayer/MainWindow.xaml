@@ -246,6 +246,20 @@
                             </StackPanel>
                         </Grid>
 
+                        <!-- Куда ляжет перетаскиваемый файл (задача #35): над кадром рисовать
+                             нечем, кроме накладки хоста, — обычная рамка поверх Stage оказалась
+                             бы под окном вывода FlyleafHost. -->
+                        <Border x:Name="DropTargetA" Visibility="Collapsed" IsHitTestVisible="False"
+                                Panel.ZIndex="3" Margin="10" CornerRadius="6"
+                                BorderThickness="3" Background="#33F2A13C"
+                                BorderBrush="{StaticResource AccentBrush}">
+                            <Border VerticalAlignment="Center" HorizontalAlignment="Center"
+                                    CornerRadius="4" Padding="14,8" Background="#D9050709">
+                                <TextBlock x:Name="DropTargetTextA" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextBrush}" />
+                            </Border>
+                        </Border>
+
                         <!-- Метка трека: видна всегда, иначе не понять, где какой файл.
                              Исключение — полноэкранный режим (задача #28): там на экране
                              остаётся только кадр. -->
@@ -302,6 +316,17 @@
                                            Foreground="{StaticResource DimBrush}" HorizontalAlignment="Center" />
                             </StackPanel>
                         </Grid>
+
+                        <Border x:Name="DropTargetB" Visibility="Collapsed" IsHitTestVisible="False"
+                                Panel.ZIndex="3" Margin="10" CornerRadius="6"
+                                BorderThickness="3" Background="#334EA3E0"
+                                BorderBrush="{StaticResource TrackBBrush}">
+                            <Border VerticalAlignment="Center" HorizontalAlignment="Center"
+                                    CornerRadius="4" Padding="14,8" Background="#D9050709">
+                                <TextBlock x:Name="DropTargetTextB" FontSize="15" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextBrush}" />
+                            </Border>
+                        </Border>
 
                         <Border x:Name="PaneLabelB" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
                                 Panel.ZIndex="2" CornerRadius="4" Padding="9,4" Background="#A8050709">

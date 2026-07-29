@@ -179,8 +179,9 @@ public partial class MainWindow : AppWindow
         EventManager.RegisterClassHandler(typeof(Window), Mouse.PreviewMouseWheelEvent,
             new MouseWheelEventHandler(OnAnyWheel), true);
 
-        DragOver += OnDragOver;
-        Drop += (s, e) => OnDrop(s, e, _active);
+        DragOver += (s, e) => OnDragOver(s, e, null);
+        DragLeave += OnDragLeave;
+        Drop += (s, e) => OnDrop(s, e, null);
 
         InitRemote();
         InitCacheUi();
@@ -192,9 +193,11 @@ public partial class MainWindow : AppWindow
         ApplyLayout();
 
         // Накладка — отдельное окно, перетаскивание из главного окна там не ловится.
-        OverlayA.DragOver += OnDragOver;
+        OverlayA.DragOver += (s, args) => OnDragOver(s, args, TrackId.A);
+        OverlayA.DragLeave += OnDragLeave;
         OverlayA.Drop += (s, args) => OnDrop(s, args, TrackId.A);
-        OverlayB.DragOver += OnDragOver;
+        OverlayB.DragOver += (s, args) => OnDragOver(s, args, TrackId.B);
+        OverlayB.DragLeave += OnDragLeave;
         OverlayB.Drop += (s, args) => OnDrop(s, args, TrackId.B);
 
         _showOsd = App.Settings.ShowOverlay;
@@ -834,16 +837,95 @@ public partial class MainWindow : AppWindow
 
     // ---------- перетаскивание файла ----------
 
-    private void OnDragOver(object sender, DragEventArgs e)
+    /// <summary>Подсвеченная сейчас сторона; <c>null</c> — перетаскивания нет.</summary>
+    private TrackId? _dropHint;
+
+    /// <summary>
+    /// Счётчик событий перетаскивания. Уход курсора с панели приходит раньше, чем
+    /// наведение на соседнюю, и снимать подсветку сразу означало бы моргать ею на
+    /// каждой границе: гасим отложенно и только если наведения так и не случилось.
+    /// </summary>
+    private int _dragTick;
+
+    /// <summary>
+    /// Куда лёг бы файл, брошенный над стороной <paramref name="hovered"/>. Открытый
+    /// ролик перетаскиванием не заменяют, пока второй трек пуст: бросок в плеер с
+    /// одним файлом — это заявка на сравнение (задача #35). Когда открыты оба,
+    /// заменяется та сторона, над которой держат файл.
+    /// </summary>
+    private TrackId DropTarget(TrackId hovered) =>
+        _a.IsOpen == _b.IsOpen ? hovered : _a.IsOpen ? TrackId.B : TrackId.A;
+
+    private void OnDragOver(object sender, DragEventArgs e, TrackId? hovered)
     {
+        // Окно показано раньше, чем подняты плееры (задача #31): до этого брать
+        // файл некуда.
+        if (_sync is null) return;
+
         var (path, _) = DroppedVideo(e);
         e.Effects = path is null ? DragDropEffects.None : DragDropEffects.Copy;
         e.Handled = true;
+
+        _dragTick++;
+
+        // Сессия меняет обе стороны разом — подсвечивать одну из них было бы обманом.
+        ShowDropHint(path is null || IsSessionFile(path)
+            ? null
+            : DropTarget(hovered ?? _active));
     }
 
-    private void OnDrop(object sender, DragEventArgs e, TrackId id)
+    private void OnDragLeave(object sender, DragEventArgs e)
+    {
+        var tick = _dragTick;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background,
+            () => { if (_dragTick == tick) ShowDropHint(null); });
+    }
+
+    private void ShowDropHint(TrackId? target)
+    {
+        if (_dropHint == target) return;
+
+        _dropHint = target;
+        ApplyDropHint();
+    }
+
+    private void ApplyDropHint()
+    {
+        DropTargetA.Visibility = Visibility.Collapsed;
+        DropTargetB.Visibility = Visibility.Collapsed;
+
+        if (_dropHint is not { } target) return;
+
+        var track = _sync.Track(target);
+        var other = _sync.Track(target == TrackId.A ? TrackId.B : TrackId.A);
+
+        // Раскладка может прятать сторону, в которую файл и уйдёт («только A», а
+        // открывается B): подсветка тогда рисуется в видимой панели, а надпись всё
+        // равно называет настоящую сторону — иначе бросок выглядел бы промахом.
+        var targetVisible = (target == TrackId.A ? PaneA : PaneB).Visibility == Visibility.Visible;
+        var inA = target == TrackId.A ? targetVisible : !targetVisible;
+
+        var (box, text) = inA ? (DropTargetA, DropTargetTextA) : (DropTargetB, DropTargetTextB);
+
+        box.BorderBrush = (Brush)FindResource(target == TrackId.A ? "AccentBrush" : "TrackBBrush");
+        box.Background = new SolidColorBrush(target == TrackId.A
+            ? Color.FromArgb(0x33, 0xF2, 0xA1, 0x3C)
+            : Color.FromArgb(0x33, 0x4E, 0xA3, 0xE0));
+
+        text.Text = track.IsOpen ? $"Заменить {track.Letter}"
+            : other.IsOpen ? $"Сравнить: открыть в {track.Letter}"
+            : $"Открыть в {track.Letter}";
+
+        box.Visibility = Visibility.Visible;
+    }
+
+    private void OnDrop(object sender, DragEventArgs e, TrackId? hovered)
     {
         e.Handled = true;
+        if (_sync is null) return;
+
+        ShowDropHint(null);
+
         var (path, error) = DroppedVideo(e);
 
         if (path is null)
@@ -853,15 +935,30 @@ public partial class MainWindow : AppWindow
         }
 
         // Сессию открываем как сессию: её файл тоже удобно бросать в окно.
-        if (path.EndsWith(Session.FileExtension, StringComparison.OrdinalIgnoreCase))
+        if (IsSessionFile(path))
         {
             if (Session.Load(path) is { } session) ApplySession(session, $"сессия «{Path.GetFileNameWithoutExtension(path)}»");
             else Status($"не прочитать сессию {Path.GetFileName(path)} — файл повреждён");
             return;
         }
 
-        if (OpenFile(_sync.Track(id), path)) AutoPlayAfterOpen();
+        var wasOpen = _a.IsOpen || _b.IsOpen;
+
+        if (!OpenFile(_sync.Track(DropTarget(hovered ?? _active)), path)) return;
+
+        // Второй ролик в плеере — это и есть сравнение: показываем оба кадра, даже
+        // если до броска была раскладка «только A».
+        if (wasOpen && BothOpen() && _layout != LayoutMode.Side)
+        {
+            _layout = LayoutMode.Side;
+            ApplyLayout();
+        }
+
+        AutoPlayAfterOpen();
     }
+
+    private static bool IsSessionFile(string path) =>
+        path.EndsWith(Session.FileExtension, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Путь к перетаскиваемому файлу и причина отказа, если брать его не следует.
