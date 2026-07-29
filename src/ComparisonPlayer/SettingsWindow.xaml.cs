@@ -65,6 +65,8 @@ public partial class SettingsWindow : AppWindow
 
         if (page is not null) ShowPage(page);
 
+        ShowAssociations();
+
         PathData.Text = AppEnv.DataDir;
         PathData.ToolTip = AppEnv.DataDir;
         PathCache.Text = AppEnv.CacheDir;
@@ -170,7 +172,7 @@ public partial class SettingsWindow : AppWindow
         if (item is not null) item.IsChecked = true;
     }
 
-    private IEnumerable<RadioButton> NavItems() => [NavGeneral, NavStartup, NavStep, NavCache, NavPaths, NavKeys];
+    private IEnumerable<RadioButton> NavItems() => [NavGeneral, NavStartup, NavStep, NavCache, NavAssoc, NavPaths, NavKeys];
 
     private void Nav_Checked(object sender, RoutedEventArgs e)
     {
@@ -181,6 +183,7 @@ public partial class SettingsWindow : AppWindow
         PageStartup.Visibility = Page(tag == "startup");
         PageStep.Visibility = Page(tag == "step");
         PageCache.Visibility = Page(tag == "cache");
+        PageAssoc.Visibility = Page(tag == "assoc");
         PagePaths.Visibility = Page(tag == "paths");
         PageKeys.Visibility = Page(tag == KeysPage);
 
@@ -189,6 +192,64 @@ public partial class SettingsWindow : AppWindow
         PageScroll.ScrollToTop();
 
         static Visibility Page(bool shown) => shown ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ---------- типы файлов ----------
+
+    /// <summary>
+    /// Состояние регистрации и надпись на кнопке. Читаем реестр каждый раз заново: ассоциации
+    /// живут в системе, а не в настройках, и могли измениться мимо нас — переустановкой
+    /// программы или другим приложением.
+    /// </summary>
+    private void ShowAssociations()
+    {
+        var scope = FileAssociations.Scope;
+
+        AssocState.Text = scope switch
+        {
+            AssociationScope.User => "CVP зарегистрирован для видеофайлов у этого пользователя.",
+            AssociationScope.Machine =>
+                "CVP зарегистрирован установщиком для всех пользователей компьютера. " +
+                "Снять такую регистрацию можно удалением программы.",
+            _ => "CVP не зарегистрирован: в меню «Открыть с помощью» его нет."
+        };
+
+        // Машинную запись обычным процессом не снять — прав не хватит, и кнопка бы только обманывала.
+        BtnAssocRegister.Content = scope == AssociationScope.User ? "Убрать регистрацию" : "Зарегистрировать CVP";
+        BtnAssocRegister.IsEnabled = scope != AssociationScope.Machine;
+
+        AssocExtensions.Text = "Расширения: " + string.Join(", ", FileAssociations.VideoExtensions);
+    }
+
+    private void AssocRegister_Click(object sender, RoutedEventArgs e)
+    {
+        var registered = FileAssociations.Scope == AssociationScope.User;
+
+        try
+        {
+            if (registered) FileAssociations.Unregister();
+            else FileAssociations.Register();
+        }
+        catch (Exception ex)
+        {
+            MessageDialog.Show(this, "Типы файлов",
+                $"Не удалось {(registered ? "снять регистрацию" : "зарегистрировать")} типы файлов.\n\n{ex.Message}");
+        }
+
+        ShowAssociations();
+    }
+
+    private void AssocDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            FileAssociations.OpenDefaultAppsSettings();
+        }
+        catch (Exception ex)
+        {
+            MessageDialog.Show(this, "Типы файлов",
+                $"Не открылось окно «Приложения по умолчанию».\n\n{ex.Message}");
+        }
     }
 
     // ---------- шпаргалка ----------

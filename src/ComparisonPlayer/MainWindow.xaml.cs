@@ -41,9 +41,12 @@ internal enum SideMode
 /// </summary>
 public partial class MainWindow : AppWindow
 {
-    /// <summary>Расширения, которые принимаем перетаскиванием и показываем в диалоге.</summary>
-    private static readonly string[] VideoExtensions =
-        [".mp4", ".mkv", ".mov", ".avi", ".ts", ".m4v", ".webm", ".wmv", ".mpg", ".mpeg"];
+    /// <summary>
+    /// Расширения, которые принимаем перетаскиванием и показываем в диалоге. Список общий
+    /// с регистрацией типов файлов (задача #13): расходиться им нельзя — иначе «Открыть с
+    /// помощью» приводило бы в плеер файл, который тот сам открыть отказывается.
+    /// </summary>
+    private static string[] VideoExtensions => FileAssociations.VideoExtensions;
 
     private readonly PlayerTrack _a = new(TrackId.A);
     private readonly PlayerTrack _b = new(TrackId.B);

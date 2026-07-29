@@ -85,6 +85,8 @@
                                  Tag="step" Content="Шаг и промотка" Checked="Nav_Checked" />
                     <RadioButton x:Name="NavCache" Style="{StaticResource NavItem}" GroupName="Nav"
                                  Tag="cache" Content="Кэш кадров" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavAssoc" Style="{StaticResource NavItem}" GroupName="Nav"
+                                 Tag="assoc" Content="Типы файлов" Checked="Nav_Checked" />
                     <RadioButton x:Name="NavPaths" Style="{StaticResource NavItem}" GroupName="Nav"
                                  Tag="paths" Content="Пути" Checked="Nav_Checked" />
 
@@ -225,6 +227,27 @@
                         </WrapPanel>
                         <TextBlock Style="{StaticResource PanelHint}" Margin="0,0,0,4"
                                    Text="Ниже исходной — кэш меньше и собирается быстрее, но кадры прореживаются, а их номера становятся номерами прокси." />
+                    </StackPanel>
+
+                    <!-- Типы файлов (задача #13). Кнопки правят реестр сразу, не дожидаясь
+                         «Сохранить»: это действие над системой, а не значение настройки. -->
+                    <StackPanel x:Name="PageAssoc" Style="{StaticResource Page}">
+                        <TextBlock Text="Т И П Ы   Ф А Й Л О В" Style="{StaticResource SectionHeader}" />
+
+                        <TextBlock x:Name="AssocState" Style="{StaticResource PanelHint}"
+                                   Margin="0,0,0,10" TextWrapping="Wrap" />
+
+                        <WrapPanel Margin="0,0,0,12">
+                            <Button x:Name="BtnAssocRegister" Style="{StaticResource ToolButton}"
+                                    Margin="0,0,8,0" Click="AssocRegister_Click" />
+                            <Button Style="{StaticResource ToolButton}"
+                                    Content="Приложения по умолчанию Windows…" Click="AssocDefaults_Click" />
+                        </WrapPanel>
+
+                        <TextBlock x:Name="AssocExtensions" Style="{StaticResource PanelHint}"
+                                   Margin="0,0,0,8" TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource PanelHint}" TextWrapping="Wrap" Margin="0,0,0,4"
+                                   Text="Плеером по умолчанию программа себя назначить не может: с Windows 10 этот выбор делается только в системном окне. Регистрация добавляет CVP в «Открыть с помощью» и в список приложений, среди которых там можно выбрать." />
                     </StackPanel>
 
                     <!-- Пути -->
