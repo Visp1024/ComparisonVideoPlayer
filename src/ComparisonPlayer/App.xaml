@@ -554,16 +554,42 @@
             </Setter>
         </Style>
 
+        <!-- Пункт меню (задача #32): колонка под иконку или галочку, подпись и клавиша
+             справа. Клавиша берётся из InputGestureText, а не дописывается в заголовок:
+             иначе она встаёт вплотную к тексту и колонка не выравнивается. -->
         <Style TargetType="MenuItem">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="Bd" Background="Transparent" Padding="14,5">
-                            <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
+                        <Border x:Name="Bd" Background="Transparent" Padding="12,5">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <ContentPresenter x:Name="Ico" Grid.Column="0" ContentSource="Icon"
+                                                  VerticalAlignment="Center" HorizontalAlignment="Left" />
+                                <TextBlock x:Name="Check" Grid.Column="0" Text="✓" FontSize="11" FontWeight="Bold"
+                                           Foreground="{StaticResource AccentBrush}" Visibility="Collapsed"
+                                           VerticalAlignment="Center" />
+
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center" />
+
+                                <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}"
+                                           Margin="20,0,0,0" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                           Foreground="{StaticResource DimBrush}" />
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                            </Trigger>
                             <Trigger Property="IsHighlighted" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource LineBrush}" />
                             </Trigger>
@@ -574,6 +600,18 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Иконка пункта меню: тот же набор фигур, что и в панелях -->
+        <Style x:Key="MenuIcon" TargetType="Path">
+            <Setter Property="Stroke" Value="{StaticResource MutedBrush}" />
+            <Setter Property="StrokeThickness" Value="1.5" />
+            <Setter Property="StrokeStartLineCap" Value="Round" />
+            <Setter Property="StrokeEndLineCap" Value="Round" />
+            <Setter Property="StrokeLineJoin" Value="Round" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
         </Style>
 
         <Style TargetType="Separator">
@@ -678,6 +716,401 @@
             <Setter Property="FontSize" Value="10.5" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="16,14,16,4" />
+        </Style>
+
+        <!-- ================================================================
+             Задача #32: иконки панелей.
+             Свои векторные фигуры, а не системный шрифт значков: Segoe Fluent
+             Icons есть только на Windows 11, а половины нужных знаков (шаттл,
+             границы отрезка, сдвиг трека) нет и в нём. Все фигуры нарисованы
+             в квадрате 20×20 и показываются через Viewbox — так один и тот же
+             набор одинаково выглядит и в панели, и в ужатом подвале.
+             ================================================================ -->
+
+        <!-- Файл и сессия -->
+        <PathGeometry x:Key="IcoFolder"
+            Figures="M3.6,4.6 H6.6 L8.1,6.3 H16.4 A1,1 0 0 1 17.4,7.3 V14.4 A1,1 0 0 1 16.4,15.4 H3.6 A1,1 0 0 1 2.6,14.4 V5.6 A1,1 0 0 1 3.6,4.6 Z" />
+        <PathGeometry x:Key="IcoSave"
+            Figures="M3.4,5.6 A1,1 0 0 1 4.4,4.6 H13.4 L16.6,7 V15.4 A1,1 0 0 1 15.6,16.4 H4.4 A1,1 0 0 1 3.4,15.4 Z M6.6,4.6 V7.8 H12.8 V4.6 M6.6,16.4 V11.8 H13.4 V16.4" />
+        <PathGeometry x:Key="IcoClock" Figures="M10,5.8 V10 L12.8,11.8" />
+        <GeometryGroup x:Key="IcoClockFull">
+            <EllipseGeometry Center="10,10" RadiusX="7.1" RadiusY="7.1" />
+            <PathGeometry Figures="M10,5.8 V10 L12.8,11.8" />
+        </GeometryGroup>
+        <PathGeometry x:Key="IcoClose" Figures="M5.6,5.6 L14.4,14.4 M14.4,5.6 L5.6,14.4" />
+        <PathGeometry x:Key="IcoChevronDown" Figures="M6,8.2 L10,12.2 L14,8.2" />
+
+        <!-- Панели и окно -->
+        <GeometryGroup x:Key="IcoInfo">
+            <EllipseGeometry Center="10,10" RadiusX="7.1" RadiusY="7.1" />
+            <PathGeometry Figures="M10,9.2 V13.8 M10,6.3 V7.2" />
+        </GeometryGroup>
+        <GeometryGroup x:Key="IcoCache">
+            <EllipseGeometry Center="10,5.4" RadiusX="6" RadiusY="2.4" />
+            <PathGeometry Figures="M4,5.4 V14.6 C4,15.9 6.7,17 10,17 C13.3,17 16,15.9 16,14.6 V5.4 M4,10 C4,11.3 6.7,12.4 10,12.4 C13.3,12.4 16,11.3 16,10" />
+        </GeometryGroup>
+        <PathGeometry x:Key="IcoCube"
+            Figures="M10,2.7 L17,6.3 L17,13.7 L10,17.3 L3,13.7 L3,6.3 Z M3,6.3 L10,10 L17,6.3 M10,10 V17.3" />
+        <!-- Шестерёнка: зубцы короткие и близко к ободу — с длинными лучами фигура
+             читалась солнцем, а не механизмом -->
+        <GeometryGroup x:Key="IcoGear">
+            <EllipseGeometry Center="10,10" RadiusX="3.1" RadiusY="3.1" />
+            <EllipseGeometry Center="10,10" RadiusX="6.2" RadiusY="6.2" />
+            <PathGeometry Figures="M10,3.8 V2.2 M10,16.2 V17.8 M16.2,10 H17.8 M3.8,10 H2.2 M14.4,5.6 L15.5,4.5 M5.6,14.4 L4.5,15.5 M14.4,14.4 L15.5,15.5 M5.6,5.6 L4.5,4.5" />
+        </GeometryGroup>
+        <PathGeometry x:Key="IcoFullscreen"
+            Figures="M3,7.2 V3 H7.2 M12.8,3 H17 V7.2 M17,12.8 V17 H12.8 M7.2,17 H3 V12.8" />
+        <PathGeometry x:Key="IcoExitFullscreen"
+            Figures="M7.4,3 V7.4 H3 M12.6,3 V7.4 H17 M17,12.6 H12.6 V17 M3,12.6 H7.4 V17" />
+
+        <!-- Раскладка и масштаб кадра -->
+        <GeometryGroup x:Key="IcoPanes">
+            <RectangleGeometry Rect="2.4,4.6,6.6,10.8" RadiusX="1" RadiusY="1" />
+            <RectangleGeometry Rect="11,4.6,6.6,10.8" RadiusX="1" RadiusY="1" />
+        </GeometryGroup>
+        <!-- Накладка над кадром: плашка в левом верхнем углу -->
+        <GeometryGroup x:Key="IcoOverlay">
+            <RectangleGeometry Rect="2.4,4.4,15.2,11.2" RadiusX="1" RadiusY="1" />
+            <RectangleGeometry Rect="5,7,7.4,2.6" RadiusX="0.8" RadiusY="0.8" />
+        </GeometryGroup>
+
+        <GeometryGroup x:Key="IcoScaleFit">
+            <RectangleGeometry Rect="2.4,4.4,15.2,11.2" RadiusX="1" RadiusY="1" />
+            <RectangleGeometry Rect="5.4,6.8,9.2,6.4" />
+        </GeometryGroup>
+        <GeometryGroup x:Key="IcoScaleFill">
+            <RectangleGeometry Rect="2.4,4.4,15.2,11.2" RadiusX="1" RadiusY="1" />
+            <RectangleGeometry Rect="0.8,6.4,18.4,7.2" />
+        </GeometryGroup>
+        <GeometryGroup x:Key="IcoScaleStretch">
+            <RectangleGeometry Rect="2.4,4.4,15.2,11.2" RadiusX="1" RadiusY="1" />
+            <PathGeometry Figures="M6.6,10 H13.4 M6.6,10 L8.4,8.2 M6.6,10 L8.4,11.8 M13.4,10 L11.6,8.2 M13.4,10 L11.6,11.8" />
+        </GeometryGroup>
+
+        <!-- Транспорт: сплошные фигуры -->
+        <PathGeometry x:Key="IcoPlay" Figures="M6.6,4.4 L15.6,10 L6.6,15.6 Z" />
+        <GeometryGroup x:Key="IcoPause">
+            <RectangleGeometry Rect="5.6,4.4,3.2,11.2" RadiusX="1" RadiusY="1" />
+            <RectangleGeometry Rect="11.2,4.4,3.2,11.2" RadiusX="1" RadiusY="1" />
+        </GeometryGroup>
+        <!-- Шаг на кадр: черта с той стороны, куда шагаем «до упора в кадр» — ◀| и |▶.
+             У «в начало» она с другой стороны, иначе три кнопки транспорта подряд
+             отличались бы только размером треугольника. -->
+        <GeometryGroup x:Key="IcoStepPrev">
+            <PathGeometry Figures="M12.9,4.6 V15.4 L4.9,10 Z" />
+            <RectangleGeometry Rect="14.5,4.6,1.9,10.8" RadiusX="0.8" RadiusY="0.8" />
+        </GeometryGroup>
+        <GeometryGroup x:Key="IcoStepNext">
+            <PathGeometry Figures="M7.1,4.6 V15.4 L15.1,10 Z" />
+            <RectangleGeometry Rect="3.6,4.6,1.9,10.8" RadiusX="0.8" RadiusY="0.8" />
+        </GeometryGroup>
+        <PathGeometry x:Key="IcoShuttleBack" Figures="M9.6,5.2 V14.8 L3.8,10 Z M17,5.2 V14.8 L11.2,10 Z" />
+        <PathGeometry x:Key="IcoShuttleFwd" Figures="M10.4,5.2 V14.8 L16.2,10 Z M3,5.2 V14.8 L8.8,10 Z" />
+        <GeometryGroup x:Key="IcoToStart">
+            <RectangleGeometry Rect="3.6,4.6,1.9,10.8" RadiusX="0.8" RadiusY="0.8" />
+            <PathGeometry Figures="M16,4.6 V15.4 L7.4,10 Z" />
+        </GeometryGroup>
+
+        <!-- Звук и скорость -->
+        <PathGeometry x:Key="IcoVolume"
+            Figures="M3,7.6 H5.6 L9.4,4.4 V15.6 L5.6,12.4 H3 Z M12.4,7.4 A3.4,3.4 0 0 1 12.4,12.6 M14.8,5.2 A6.6,6.6 0 0 1 14.8,14.8" />
+        <PathGeometry x:Key="IcoMute"
+            Figures="M3,7.6 H5.6 L9.4,4.4 V15.6 L5.6,12.4 H3 Z M12.6,7.8 L17,12.2 M17,7.8 L12.6,12.2" />
+        <GeometryGroup x:Key="IcoSpeed">
+            <PathGeometry Figures="M3.2,14.4 A8,8 0 1 1 16.8,14.4 M10,11.4 L13.6,7" />
+            <EllipseGeometry Center="10,12.4" RadiusX="1.1" RadiusY="1.1" />
+        </GeometryGroup>
+
+        <!-- Таймлайн -->
+        <GeometryGroup x:Key="IcoZoomIn">
+            <EllipseGeometry Center="8.8,8.8" RadiusX="5.4" RadiusY="5.4" />
+            <PathGeometry Figures="M12.8,12.8 L17,17 M6.6,8.8 H11 M8.8,6.6 V11" />
+        </GeometryGroup>
+        <GeometryGroup x:Key="IcoZoomOut">
+            <EllipseGeometry Center="8.8,8.8" RadiusX="5.4" RadiusY="5.4" />
+            <PathGeometry Figures="M12.8,12.8 L17,17 M6.6,8.8 H11" />
+        </GeometryGroup>
+        <PathGeometry x:Key="IcoFitWidth"
+            Figures="M2.6,4.6 V15.4 M17.4,4.6 V15.4 M5.4,10 H14.6 M5.4,10 L7.8,7.6 M5.4,10 L7.8,12.4 M14.6,10 L12.2,7.6 M14.6,10 L12.2,12.4" />
+        <PathGeometry x:Key="IcoMagnet"
+            Figures="M4.6,3.6 V10.2 A5.4,5.4 0 0 0 15.4,10.2 V3.6 M4.6,9.6 H8.8 M11.2,9.6 H15.4" />
+        <PathGeometry x:Key="IcoMaster"
+            Figures="M10,2.8 L12.2,7.4 L17.2,8.1 L13.6,11.7 L14.5,16.7 L10,14.3 L5.5,16.7 L6.4,11.7 L2.8,8.1 L7.8,7.4 Z" />
+        <PathGeometry x:Key="IcoSegmentIn" Figures="M9,4.4 H5.2 V15.6 H9 M13.6,4.4 V15.6" />
+        <PathGeometry x:Key="IcoSegmentOut" Figures="M11,4.4 H14.8 V15.6 H11 M6.4,4.4 V15.6" />
+        <PathGeometry x:Key="IcoLoop"
+            Figures="M4.4,8 V7 A2,2 0 0 1 6.4,5 H15.6 M13.6,2.8 L16.6,5 L13.6,7.2 M15.6,12 V13 A2,2 0 0 1 13.6,15 H4.4 M6.4,12.8 L3.4,15 L6.4,17.2" />
+        <PathGeometry x:Key="IcoReset" Figures="M4.2,10 A5.8,5.8 0 1 0 6.1,5.7 M3.4,4 V7.6 H7" />
+        <GeometryGroup x:Key="IcoOffset">
+            <RectangleGeometry Rect="2.4,4,9.2,4.4" RadiusX="1" RadiusY="1" />
+            <RectangleGeometry Rect="8.4,11.6,9.2,4.4" RadiusX="1" RadiusY="1" />
+            <PathGeometry Figures="M14,8.4 V11.6" />
+        </GeometryGroup>
+        <PathGeometry x:Key="IcoMinus" Figures="M5.4,10 H14.6" />
+        <PathGeometry x:Key="IcoPlus" Figures="M5.4,10 H14.6 M10,5.4 V14.6" />
+        <PathGeometry x:Key="IcoCollapse" Figures="M3.4,16.6 H16.6 M6.2,10.6 L10,14.2 L13.8,10.6 M10,3.4 V13.8" />
+        <PathGeometry x:Key="IcoExpand" Figures="M3.4,3.4 H16.6 M6.2,9.4 L10,5.8 L13.8,9.4 M10,16.6 V6.2" />
+
+        <!-- ================================================================
+             Кнопки с иконкой. Фигура приходит в Tag, а не в Content: так одна
+             и та же кнопка меняет рисунок из кода (▶ ⇄ ❚❚, звук ⇄ без звука),
+             не пересобирая содержимое. Цвет иконки взят из Foreground кнопки —
+             поэтому подсветка включённого состояния (Highlight) работает и здесь.
+             Размер иконки задан FontSize: у кнопок без подписи он больше ни на
+             что не влияет, а варианты стиля отличаются только им.
+             ================================================================ -->
+
+        <!-- Контурная иконка: всё, кроме транспорта -->
+        <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Padding" Value="7,5" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <Viewbox Width="{TemplateBinding FontSize}" Height="{TemplateBinding FontSize}"
+                                     Stretch="Uniform">
+                                <Canvas Width="20" Height="20">
+                                    <Path Data="{TemplateBinding Tag}" Stretch="None"
+                                          Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource DimBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource LineBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Сплошная иконка: транспорт. Треугольник воспроизведения контуром
+             читается хуже — это единственная группа, где фигуры залиты. -->
+        <Style x:Key="GlyphButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="FontSize" Value="19" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <Viewbox Width="{TemplateBinding FontSize}" Height="{TemplateBinding FontSize}"
+                                     Stretch="Uniform">
+                                <Canvas Width="20" Height="20">
+                                    <Path Data="{TemplateBinding Tag}" Stretch="None"
+                                          Fill="{TemplateBinding Foreground}" />
+                                </Canvas>
+                            </Viewbox>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource DimBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource LineBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PlayGlyphButton" TargetType="Button" BasedOn="{StaticResource GlyphButton}">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AccentDim}" />
+        </Style>
+
+        <!-- Панель таймлайна: тех же кнопок там полтора десятка -->
+        <Style x:Key="TimelineIconButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="FontSize" Value="16" />
+        </Style>
+
+        <!-- Компактный подвал и полноэкранная полоса (задачи #18, #28): те же фигуры мельче
+             и без рамки — рядом с кадром органы управления не должны спорить с картинкой -->
+        <Style x:Key="MiniGlyphButton" TargetType="Button" BasedOn="{StaticResource GlyphButton}">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Margin" Value="0,0,3,0" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        </Style>
+
+        <Style x:Key="MiniPlayGlyphButton" TargetType="Button" BasedOn="{StaticResource MiniGlyphButton}">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Background" Value="{StaticResource Panel2Brush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AccentDim}" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+        </Style>
+
+        <Style x:Key="MiniIconButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+            <Setter Property="Padding" Value="5,2" />
+            <Setter Property="Margin" Value="0,0,3,0" />
+            <Setter Property="FontSize" Value="15" />
+        </Style>
+
+        <!-- Кнопка с выпадающим меню: «Файл» и шестерёнка. Стрелка вниз есть всегда —
+             без неё иконка ничем не отличается от кнопки, срабатывающей сразу. -->
+        <Style x:Key="MenuBarButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Viewbox Width="17" Height="17" Stretch="Uniform">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="{TemplateBinding Tag}" Stretch="None"
+                                              Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                                <ContentPresenter x:Name="Label" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                <Viewbox Width="12" Height="12" Margin="5,1,0,0" Stretch="Uniform">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="{StaticResource IcoChevronDown}" Stretch="None"
+                                              Stroke="{StaticResource MutedBrush}" StrokeThickness="1.8"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- Без подписи (шестерёнка) отступ перед стрелкой ни к чему -->
+                            <Trigger Property="Content" Value="{x:Null}">
+                                <Setter TargetName="Label" Property="Margin" Value="0" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource DimBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource LineBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ================================================================
+             Таблетка выбора: раскладка (A · оба · B) и мастер-трек.
+             Кнопка, переключавшаяся по кругу, не показывала, между чем выбор
+             и сколько раз ещё нажать; здесь все состояния видны сразу.
+             Цвет выбранного сегмента приходит в Tag — сегмент B синий, как и
+             всё, что относится ко второму треку.
+             ================================================================ -->
+        <Style x:Key="SegPill" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource Panel2Brush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="1" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+
+        <Style x:Key="SegText" TargetType="RadioButton">
+            <Setter Property="Tag" Value="{StaticResource AccentBrush}" />
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="10,4">
+                            <ContentPresenter x:Name="Label" TextBlock.Foreground="{StaticResource MutedBrush}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Label" Property="TextBlock.Foreground"
+                                        Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource LineBrush}" />
+                                <Setter TargetName="Label" Property="TextBlock.Foreground"
+                                        Value="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Сегмент-иконка: фигура в Content, потому что Tag здесь занят цветом -->
+        <Style x:Key="SegIcon" TargetType="RadioButton" BasedOn="{StaticResource SegText}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="9,4">
+                            <Viewbox Width="16" Height="16" Stretch="Uniform">
+                                <Canvas Width="20" Height="20">
+                                    <Path x:Name="Glyph" Data="{TemplateBinding Content}" Stretch="None"
+                                          Stroke="{StaticResource MutedBrush}" StrokeThickness="1.5"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round" />
+                                </Canvas>
+                            </Viewbox>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{StaticResource TextBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource LineBrush}" />
+                                <Setter TargetName="Glyph" Property="Stroke"
+                                        Value="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
     </Application.Resources>

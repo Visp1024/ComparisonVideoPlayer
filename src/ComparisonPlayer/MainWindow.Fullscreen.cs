@@ -145,8 +145,7 @@ public partial class MainWindow
 
         // Метка трека поверх кадра (имя файла, таймкод, роль) — тоже интерфейс:
         // «остаётся только кадр» значит и без неё. Кто где, видно по выехавшей полосе.
-        PaneLabelA.Visibility = chrome;
-        PaneLabelB.Visibility = chrome;
+        ApplyOverlay();
 
         ApplyCompact();
         UpdateState();

@@ -729,45 +729,55 @@ public partial class MainWindow
         UpdateModeBadge(_b, ModeTextB, ModeDotB, ModeBadgeB);
     }
 
+    /// <summary>
+    /// Бейдж режима трека. Показывается, только когда ему есть что сказать (задача #32):
+    /// закрытый трек и обычный прямой декод — это то, чего человек и так ждёт, а бейдж
+    /// «файл не открыт» висел в панели постоянно. Буква трека в подписи нужна лишь тогда,
+    /// когда открыты оба ролика.
+    /// </summary>
     private void UpdateModeBadge(PlayerTrack track, TextBlock text, Shape dot, Border badge)
     {
         string label;
         string brush;
 
+        // Ролик открыт один — какой это трек, различать не с чем.
+        var letter = ShowTrackLetters ? track.Letter + " " : "";
+
         if (!track.IsOpen)
         {
-            label = track.Id == TrackId.A ? "файл не открыт" : $"{track.Letter} —";
-            brush = "MutedBrush";
+            badge.Visibility = Visibility.Collapsed;
+            return;
         }
-        else if (track.BuildCts is not null && track.Media is { FromCache: true })
+
+        if (track.BuildCts is not null && track.Media is { FromCache: true })
         {
             // Уже играем из кэша, хотя он ещё достраивается.
-            label = $"{track.Letter} кэш · сборка {track.BuildPercent:F0} %{Remaining(track)}";
+            label = $"{letter}кэш · сборка {track.BuildPercent:F0} %{Remaining(track)}";
             brush = "OkBrush";
         }
         else if (track.BuildCts is not null)
         {
-            label = $"{track.Letter} сборка кэша {track.BuildPercent:F0} %{Remaining(track)}";
+            label = $"{letter}сборка кэша {track.BuildPercent:F0} %{Remaining(track)}";
             brush = "AccentBrush";
         }
         else if (ReferenceEquals(_queued, track))
         {
-            label = $"{track.Letter} кэш в очереди";
+            label = $"{letter}кэш в очереди";
             brush = "MutedBrush";
         }
         else if (track.Media is { FromCache: true })
         {
-            label = track.CacheStepMs > 0 ? $"{track.Letter} кэш · шаг {track.CacheStepMs:F0} мс" : $"{track.Letter} кэш";
+            label = track.CacheStepMs > 0 ? $"{letter}кэш · шаг {track.CacheStepMs:F0} мс" : $"{letter}кэш";
             brush = "OkBrush";
         }
         else
         {
-            label = track.SourceStepMs > 0
-                ? $"{track.Letter} прямой декод · шаг {track.SourceStepMs:F0} мс"
-                : $"{track.Letter} прямой декод";
-            brush = "MutedBrush";
+            // Прямой декод с исходника — обычный ход дела, о нём молчим.
+            badge.Visibility = Visibility.Collapsed;
+            return;
         }
 
+        badge.Visibility = Visibility.Visible;
         text.Text = label;
         text.Foreground = (Brush)FindResource(brush);
         dot.Fill = (Brush)FindResource(brush == "MutedBrush" ? "DimBrush" : brush);

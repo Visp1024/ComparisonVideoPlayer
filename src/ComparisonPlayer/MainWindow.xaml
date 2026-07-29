@@ -27,93 +27,150 @@
              место, где имена файлов видны, не наводя глаз на метки поверх кадра. -->
         <chrome:TitleBar x:Name="Bar" Grid.Row="0" Caption="CVP" />
 
-        <!-- Панель инструментов -->
+        <!-- Панель инструментов (задача #32).
+             Одиннадцать подписей читались как список, а не как инструмент, и в узком
+             окне не помещались. Теперь: открытие файлов и сессия — под «Файл»,
+             настройки — под шестерёнкой, остальное — иконки с подсказками. -->
         <Border x:Name="Toolbar" Grid.Row="1" BorderBrush="{StaticResource LineBrush}"
-                BorderThickness="0,0,0,1" Padding="12,8">
+                BorderThickness="0,0,0,1" Padding="12,7">
             <DockPanel LastChildFill="False">
-                <Button x:Name="BtnOpenA" Style="{StaticResource PrimaryButton}" Click="OpenA_Click"
-                        ToolTip="Открыть файл в трек A (Ctrl+O)">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Открыть A" />
-                        <TextBlock Text="Ctrl+O" Margin="8,0,0,0" FontSize="11"
-                                   FontFamily="{StaticResource MonoFont}"
-                                   Foreground="{StaticResource DimBrush}" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="BtnOpenB" Style="{StaticResource ToolButton}" Click="OpenB_Click"
-                        Foreground="{StaticResource TrackBBrush}" BorderBrush="{StaticResource TrackBDim}"
-                        ToolTip="Открыть файл в трек B (Ctrl+Shift+O)">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Открыть B" />
-                        <TextBlock Text="Ctrl+Shift+O" Margin="8,0,0,0" FontSize="11"
-                                   FontFamily="{StaticResource MonoFont}"
-                                   Foreground="{StaticResource DimBrush}" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="BtnClose" Style="{StaticResource ToolButton}" Content="Закрыть" Click="Close_Click"
-                        ToolTip="Закрыть файл активного трека" />
-
-                <!-- Сессия (фаза 5): пара роликов с выравниванием и отрезками — результат
-                     ручной работы, и он переживает закрытие окна -->
-                <Button x:Name="BtnSession" Style="{StaticResource ToolButton}" Content="Сессия…"
-                        Click="Session_Click" ToolTip="Сохранить, открыть или восстановить сессию сравнения">
+                <!-- Меню «Файл»: открытие роликов, закрытие трека и сессия сравнения
+                     (фаза 5) — всё это про файлы, отдельная кнопка на каждое съедала
+                     половину панели -->
+                <Button x:Name="BtnFile" Style="{StaticResource MenuBarButton}" Content="Файл"
+                        Tag="{StaticResource IcoFolder}" Click="File_Click"
+                        ToolTip="Открыть ролик, закрыть трек, сессия сравнения">
                     <Button.ContextMenu>
-                        <ContextMenu x:Name="SessionMenu" Background="{StaticResource Panel2Brush}"
-                                     Foreground="{StaticResource TextBrush}"
-                                     BorderBrush="{StaticResource LineBrush}">
-                            <MenuItem Header="Сохранить сессию…  Ctrl+S" Click="SessionSave_Click" />
-                            <MenuItem Header="Открыть сессию…" Click="SessionOpen_Click" />
+                        <ContextMenu x:Name="FileMenu">
+                            <MenuItem Header="Открыть в трек A…" InputGestureText="Ctrl+O" Click="OpenA_Click">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource MenuIcon}" Data="{StaticResource IcoFolder}"
+                                          Stroke="{StaticResource AccentBrush}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Открыть в трек B…" InputGestureText="Ctrl+Shift+O" Click="OpenB_Click">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource MenuIcon}" Data="{StaticResource IcoFolder}"
+                                          Stroke="{StaticResource TrackBBrush}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem x:Name="MnuClose" Header="Закрыть активный трек" Click="Close_Click">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource MenuIcon}" Data="{StaticResource IcoClose}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
                             <Separator />
-                            <MenuItem Header="Восстановить последнюю" Click="SessionRestore_Click" />
+                            <MenuItem Header="Сохранить сессию…" InputGestureText="Ctrl+S" Click="SessionSave_Click">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource MenuIcon}" Data="{StaticResource IcoSave}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Открыть сессию…" Click="SessionOpen_Click">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource MenuIcon}" Data="{StaticResource IcoFolder}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Восстановить последнюю" Click="SessionRestore_Click">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource MenuIcon}" Data="{StaticResource IcoClockFull}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
 
-                <Button x:Name="BtnInfo" Style="{StaticResource ToolButton}" Content="Сведения" Click="Info_Click"
-                        ToolTip="Сведения о файле (Ctrl+I)" />
-                <Button x:Name="BtnLayout" Style="{StaticResource ToolButton}" Content="Рядом" Click="Layout_Click"
-                        ToolTip="Что показывать: рядом / только A / только B (V)" />
+                <Border Width="1" Margin="4,2,10,2" Background="{StaticResource LineBrush}" />
+
+                <!-- Раскладка таблеткой: кнопка по кругу не показывала, между чем выбор.
+                     Второго ролика нет — прятать целиком (задача #32): «только B» вело
+                     в пустой экран. -->
+                <Border x:Name="LayoutPill" Style="{StaticResource SegPill}"
+                        ToolTip="Что показывать: только A / оба кадра / только B (V)">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton x:Name="SegLayoutA" Style="{StaticResource SegText}" GroupName="Layout"
+                                     Content="A" Checked="Layout_Checked" />
+                        <RadioButton x:Name="SegLayoutBoth" Style="{StaticResource SegIcon}" GroupName="Layout"
+                                     Content="{StaticResource IcoPanes}" Checked="Layout_Checked" />
+                        <RadioButton x:Name="SegLayoutB" Style="{StaticResource SegText}" GroupName="Layout"
+                                     Content="B" Tag="{StaticResource TrackBBrush}" Checked="Layout_Checked" />
+                    </StackPanel>
+                </Border>
 
                 <!-- Как кадр вписан в область (задача #28): вписать / заполнить / растянуть -->
-                <Button x:Name="BtnScale" Style="{StaticResource ToolButton}" Content="Вписать" Click="Scale_Click"
+                <Button x:Name="BtnScale" Style="{StaticResource IconButton}"
+                        Tag="{StaticResource IcoScaleFit}" Click="Scale_Click"
                         ToolTip="Кадр в области: вписать / заполнить / растянуть (Z)" />
 
-                <!-- Пауза при переходе по таймлайну (задача #29): настройка живёт и в окне
-                     настроек, но её меняют по ходу просмотра, поэтому флажок стоит здесь -->
-                <CheckBox x:Name="ChkPauseOnSeek" VerticalAlignment="Center" Margin="16,0,0,0"
-                          Content="Пауза при переходе" Click="PauseOnSeek_Click"
-                          ToolTip="Ставить на паузу при переходе по таймлайну: щелчок по шкале, перетаскивание playhead, Home/End. Выключено — воспроизведение продолжается с нового места." />
+                <!-- Накладка над кадром: имя файла, таймкод и номер кадра в левом верхнем
+                     углу. Клавиша T была единственным способом её убрать (задача #32). -->
+                <Button x:Name="BtnOverlay" Style="{StaticResource IconButton}"
+                        Tag="{StaticResource IcoOverlay}" Click="Overlay_Click"
+                        ToolTip="Накладка над кадром: имя файла, таймкод и номер кадра (T)" />
 
-                <Button x:Name="BtnFullScreen" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="⛶" Margin="8,0,0,0" Padding="10,1" Click="FullScreen_Click"
-                        ToolTip="Во весь экран: остаётся только кадр (F11)" />
+                <Border Width="1" Margin="4,2,10,2" Background="{StaticResource LineBrush}" />
 
-                <Button x:Name="BtnSettings" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Настройки" Margin="8,0,0,0" Click="Settings_Click"
-                        ToolTip="Настройки и шпаргалка по клавишам (F1)" />
+                <Button x:Name="BtnInfo" Style="{StaticResource IconButton}" Tag="{StaticResource IcoInfo}"
+                        Click="Info_Click" ToolTip="Сведения о файле (Ctrl+I)" />
 
                 <!-- Кэш кадров: индикаторы режима по треку и панель управления -->
-                <Button x:Name="BtnCache" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Кэш…" Margin="8,0,0,0" Click="Cache_Click"
-                        ToolTip="Режим кэша кадров, объём хранилища (C)" />
+                <Button x:Name="BtnCache" Style="{StaticResource IconButton}" Tag="{StaticResource IcoCache}"
+                        Click="Cache_Click" ToolTip="Режим кэша кадров, объём хранилища (C)" />
+
+                <Button x:Name="BtnFullScreen" DockPanel.Dock="Right" Style="{StaticResource IconButton}"
+                        Tag="{StaticResource IcoFullscreen}" Margin="6,0,0,0" Click="FullScreen_Click"
+                        ToolTip="Во весь экран: остаётся только кадр (F11)" />
+
+                <!-- Шестерёнка: флажок «Пауза при переходе» занимал в панели больше места,
+                     чем любая кнопка, а трогают его редко -->
+                <Button x:Name="BtnSettings" DockPanel.Dock="Right" Style="{StaticResource MenuBarButton}"
+                        Tag="{StaticResource IcoGear}" Margin="6,0,0,0" Padding="7,5" Click="Settings_Click"
+                        ToolTip="Настройки, клавиши и пауза при переходе">
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="SettingsMenu">
+                            <MenuItem x:Name="MnuPauseOnSeek" IsCheckable="True"
+                                      Header="Пауза при переходе по таймлайну" Click="PauseOnSeek_Click"
+                                      ToolTip="Ставить на паузу при переходе по таймлайну: щелчок по шкале, перетаскивание playhead, Home/End. Выключено — воспроизведение продолжается с нового места." />
+                            <Separator />
+                            <MenuItem Header="Настройки…" InputGestureText="Ctrl+," Click="SettingsOpen_Click">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource MenuIcon}" Data="{StaticResource IcoGear}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Клавиши" InputGestureText="F1" Click="SettingsKeys_Click">
+                                <MenuItem.Icon>
+                                    <Path Style="{StaticResource MenuIcon}" Data="{StaticResource IcoInfo}" />
+                                </MenuItem.Icon>
+                            </MenuItem>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
 
                 <!-- Внешнее управление из Unity (задача #9): подсветка кнопки — включено ли
                      оно, цвет точки — есть ли клиент на том конце -->
                 <Button x:Name="BtnUnity" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Margin="8,0,0,0" Click="Unity_Click"
+                        Margin="6,0,0,0" Padding="7,4" Click="Unity_Click"
                         ToolTip="Внешнее управление плеером из Unity">
                     <StackPanel Orientation="Horizontal">
                         <Ellipse x:Name="UnityDot" Width="7" Height="7" Margin="0,0,6,0"
                                  VerticalAlignment="Center" Fill="{StaticResource DimBrush}" />
-                        <TextBlock Text="Unity" />
+                        <Viewbox Width="18" Height="18" Stretch="Uniform">
+                            <Canvas Width="20" Height="20">
+                                <Path Data="{StaticResource IcoCube}" Stretch="None" StrokeThickness="1.5"
+                                      StrokeLineJoin="Round"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            </Canvas>
+                        </Viewbox>
                     </StackPanel>
                 </Button>
 
-                <Button x:Name="BtnBuildCancel" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Отменить" Margin="8,0,0,0" Visibility="Collapsed" Click="CacheCancel_Click"
-                        ToolTip="Остановить сборку кэша" />
+                <Border Width="1" DockPanel.Dock="Right" Margin="10,2,4,2"
+                        Background="{StaticResource LineBrush}" />
 
-                <Border x:Name="ModeBadgeB" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
+                <Button x:Name="BtnBuildCancel" DockPanel.Dock="Right" Style="{StaticResource IconButton}"
+                        Tag="{StaticResource IcoClose}" Margin="6,0,0,0" Visibility="Collapsed"
+                        Click="CacheCancel_Click" ToolTip="Остановить сборку кэша" />
+
+                <Border x:Name="ModeBadgeB" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="6,0,0,0"
                         Background="{StaticResource Panel2Brush}" BorderBrush="{StaticResource LineBrush}"
                         BorderThickness="1" CornerRadius="4" Padding="10,4" Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal">
@@ -126,7 +183,7 @@
 
                 <Border x:Name="ModeBadge" DockPanel.Dock="Right" VerticalAlignment="Center"
                         Background="{StaticResource Panel2Brush}" BorderBrush="{StaticResource LineBrush}"
-                        BorderThickness="1" CornerRadius="4" Padding="10,4">
+                        BorderThickness="1" CornerRadius="4" Padding="10,4" Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal">
                         <Ellipse x:Name="ModeDot" Width="7" Height="7" VerticalAlignment="Center"
                                  Fill="{StaticResource DimBrush}" />
@@ -195,7 +252,10 @@
                         <Border x:Name="PaneLabelA" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
                                 Panel.ZIndex="2" CornerRadius="4" Padding="9,4" Background="#A8050709">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="A" FontFamily="{StaticResource MonoFont}" FontWeight="Bold"
+                                <!-- Буква трека не нужна, когда ролик открыт один: помечать
+                                     нечего от чего отличать (задача #32) -->
+                                <TextBlock x:Name="PaneLetterA" Text="A" FontFamily="{StaticResource MonoFont}"
+                                           FontWeight="Bold"
                                            FontSize="13" Foreground="{StaticResource AccentBrush}" />
                                 <TextBlock x:Name="PaneNameA" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
                                            FontSize="12.5" Foreground="#F3F5FA" MaxWidth="240"
@@ -246,7 +306,8 @@
                         <Border x:Name="PaneLabelB" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
                                 Panel.ZIndex="2" CornerRadius="4" Padding="9,4" Background="#A8050709">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="B" FontFamily="{StaticResource MonoFont}" FontWeight="Bold"
+                                <TextBlock x:Name="PaneLetterB" Text="B" FontFamily="{StaticResource MonoFont}"
+                                           FontWeight="Bold"
                                            FontSize="13" Foreground="{StaticResource TrackBBrush}" />
                                 <TextBlock x:Name="PaneNameB" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
                                            FontSize="12.5" Foreground="#F3F5FA" MaxWidth="240"
@@ -276,7 +337,9 @@
                                     ToolTip="Свернуть панель" />
                         </Grid>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <!-- Вкладки треков: при одном открытом ролике выбирать не из чего,
+                             и переключатель прячется целиком (задача #32) -->
+                        <StackPanel x:Name="SideTabs" Orientation="Horizontal" Margin="0,0,0,12">
                             <RadioButton x:Name="TabA" Style="{StaticResource TrackTab}" GroupName="SideTrack"
                                          Content="A" Checked="SideTab_Checked" Tag="A" />
                             <RadioButton x:Name="TabB" Style="{StaticResource TrackTab}" GroupName="SideTrack"
@@ -457,53 +520,78 @@
             <Border Grid.Row="0" Background="{StaticResource Panel2Brush}"
                     BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1" Padding="12,6">
                 <DockPanel LastChildFill="False">
-                    <Button x:Name="BtnZoomOut" Style="{StaticResource TimelineButton}" Content="−"
-                            Click="ZoomOut_Click" ToolTip="Отдалить (−)" />
+                    <Button x:Name="BtnZoomOut" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoZoomOut}" Click="ZoomOut_Click" ToolTip="Отдалить (−)" />
                     <TextBlock x:Name="TxtZoom" VerticalAlignment="Center" Margin="0,0,6,0"
-                               FontFamily="{StaticResource MonoFont}" FontSize="12.5"
-                               Foreground="{StaticResource MutedBrush}" MinWidth="76" />
-                    <Button x:Name="BtnZoomIn" Style="{StaticResource TimelineButton}" Content="+"
-                            Click="ZoomIn_Click" ToolTip="Приблизить (+)" />
-                    <Button x:Name="BtnFit" Style="{StaticResource TimelineButton}" Content="Уместить"
-                            Click="Fit_Click" ToolTip="Вся шкала в ширину окна (F)" />
-                    <Button x:Name="BtnSnap" Style="{StaticResource TimelineButton}" Content="Снэп"
-                            Click="Snap_Click" ToolTip="Притягивать playhead, ручки и клипы к границам (S)" />
-                    <Button x:Name="BtnMaster" Style="{StaticResource TimelineButton}" Content="Мастер: A"
-                            Click="Master_Click" ToolTip="Чьими кадрами меряется шаг — активный трек становится мастером (M)" />
+                               FontFamily="{StaticResource MonoFont}" FontSize="12"
+                               Foreground="{StaticResource MutedBrush}" MinWidth="76"
+                               TextAlignment="Center" />
+                    <Button x:Name="BtnZoomIn" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoZoomIn}" Click="ZoomIn_Click" ToolTip="Приблизить (+)" />
+                    <Button x:Name="BtnFit" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoFitWidth}" Click="Fit_Click"
+                            ToolTip="Уместить: вся шкала в ширину окна (F)" />
+                    <Button x:Name="BtnSnap" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoMagnet}" Click="Snap_Click"
+                            ToolTip="Снэп: притягивать playhead, ручки и клипы к границам кадров (S)" />
+
+                    <Border Width="1" Margin="4,2,10,2" Background="{StaticResource LineBrush}" />
+
+                    <!-- Мастер-трек таблеткой: раньше кнопка назначала мастером активный
+                         трек, и чтобы выбрать второй, приходилось сперва переключать
+                         активный. Здесь трек выбирается прямо (задача #32). -->
+                    <Path Data="{StaticResource IcoMaster}" Stretch="Uniform" Width="15" Height="15"
+                          Margin="0,0,6,0" VerticalAlignment="Center" StrokeThickness="1.5"
+                          StrokeLineJoin="Round" Stroke="{StaticResource MutedBrush}"
+                          ToolTip="Мастер-трек: чьими кадрами меряется шаг (M)" />
+                    <Border x:Name="MasterPill" Style="{StaticResource SegPill}"
+                            ToolTip="Мастер-трек: чьими кадрами меряется шаг (M)">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="SegMasterA" Style="{StaticResource SegText}" GroupName="Master"
+                                         Content="A" Checked="Master_Checked" />
+                            <RadioButton x:Name="SegMasterB" Style="{StaticResource SegText}" GroupName="Master"
+                                         Content="B" Tag="{StaticResource TrackBBrush}" Checked="Master_Checked" />
+                        </StackPanel>
+                    </Border>
 
                     <!-- Сдвиг второго трека: перетаскивание клипа задаёт его грубо,
                          это поле и Alt+стрелки — покадрово -->
-                    <TextBlock Text="сдвиг B" Margin="8,0,6,0" VerticalAlignment="Center"
-                               FontSize="12.5" Foreground="{StaticResource MutedBrush}" />
-                    <Button x:Name="BtnOffsetDown" Style="{StaticResource TimelineButton}" Content="−"
-                            Margin="0,0,4,0" Click="OffsetDown_Click" ToolTip="Сдвинуть B на кадр назад (Alt+←)" />
+                    <Path Data="{StaticResource IcoOffset}" Stretch="Uniform" Width="16" Height="16"
+                          Margin="6,0,6,0" VerticalAlignment="Center" StrokeThickness="1.5"
+                          StrokeLineJoin="Round" Stroke="{StaticResource TrackBBrush}"
+                          ToolTip="Сдвиг трека B относительно A" />
+                    <Button x:Name="BtnOffsetDown" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoMinus}" Margin="0,0,4,0" Click="OffsetDown_Click"
+                            ToolTip="Сдвинуть B на кадр назад (Alt+←)" />
                     <TextBox x:Name="TxtOffset" Style="{StaticResource SpeedBox}" Text="0" Width="62"
                              Foreground="{StaticResource TrackBBrush}" CaretBrush="{StaticResource TrackBBrush}"
                              KeyDown="Offset_KeyDown" LostFocus="Offset_LostFocus"
                              ToolTip="Сдвиг трека B в кадрах мастера: введите число и нажмите Enter" />
-                    <Button x:Name="BtnOffsetUp" Style="{StaticResource TimelineButton}" Content="+"
-                            Margin="4,0,6,0" Click="OffsetUp_Click" ToolTip="Сдвинуть B на кадр вперёд (Alt+→)" />
-                    <Button x:Name="BtnOffsetReset" Style="{StaticResource TimelineButton}" Content="Сбросить сдвиг"
-                            Click="OffsetReset_Click" ToolTip="Совместить начала треков (Alt+0)" />
+                    <Button x:Name="BtnOffsetUp" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoPlus}" Margin="4,0,6,0" Click="OffsetUp_Click"
+                            ToolTip="Сдвинуть B на кадр вперёд (Alt+→)" />
+                    <Button x:Name="BtnOffsetReset" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoReset}" Click="OffsetReset_Click"
+                            ToolTip="Сбросить сдвиг: совместить начала треков (Alt+0)" />
 
-                    <Button x:Name="BtnCollapse" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
-                            Content="▾" Margin="10,0,0,0" Padding="9,1" Click="ToggleCompact_Click"
+                    <Button x:Name="BtnCollapse" DockPanel.Dock="Right" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoCollapse}" Margin="10,0,0,0" Click="ToggleCompact_Click"
                             ToolTip="Свернуть до полосы прогресса (Ctrl+T)" />
 
                     <TextBlock x:Name="TxtSegment" DockPanel.Dock="Right" VerticalAlignment="Center"
-                               Margin="10,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="12.5"
+                               Margin="10,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="12"
                                Foreground="{StaticResource MutedBrush}" />
-                    <Button x:Name="BtnLoop" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
-                            Content="Петля" Margin="0" Click="Loop_Click"
-                            ToolTip="Повторять отрезок при воспроизведении (Ctrl+L)" />
-                    <Button x:Name="BtnSegReset" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
-                            Content="Сбросить" Click="SegmentReset_Click"
-                            ToolTip="Отрезок активного трека на весь ролик (Shift+I)" />
-                    <Button x:Name="BtnOut" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
-                            Content="Конец отрезка" Click="SetOut_Click"
+                    <Button x:Name="BtnLoop" DockPanel.Dock="Right" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoLoop}" Margin="0" Click="Loop_Click"
+                            ToolTip="Петля: повторять отрезок при воспроизведении (Ctrl+L)" />
+                    <Button x:Name="BtnSegReset" DockPanel.Dock="Right" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoReset}" Click="SegmentReset_Click"
+                            ToolTip="Сбросить отрезок активного трека на весь ролик (Shift+I)" />
+                    <Button x:Name="BtnOut" DockPanel.Dock="Right" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoSegmentOut}" Click="SetOut_Click"
                             ToolTip="Конец отрезка на текущем кадре (O)" />
-                    <Button x:Name="BtnIn" DockPanel.Dock="Right" Style="{StaticResource TimelineButton}"
-                            Content="Начало отрезка" Click="SetIn_Click"
+                    <Button x:Name="BtnIn" DockPanel.Dock="Right" Style="{StaticResource TimelineIconButton}"
+                            Tag="{StaticResource IcoSegmentIn}" Click="SetIn_Click"
                             ToolTip="Начало отрезка на текущем кадре (I)" />
                 </DockPanel>
             </Border>
@@ -535,15 +623,20 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button x:Name="BtnShuttleBackMini" Style="{StaticResource MiniTransportButton}" Content="◀◀"
+                        <Button x:Name="BtnShuttleBackMini" Style="{StaticResource MiniGlyphButton}"
+                                Tag="{StaticResource IcoShuttleBack}"
                                 Click="ShuttleBack_Click" ToolTip="Шаттл назад (J)" />
-                        <Button x:Name="BtnPrevMini" Style="{StaticResource MiniTransportButton}" Content="◀|"
+                        <Button x:Name="BtnPrevMini" Style="{StaticResource MiniGlyphButton}"
+                                Tag="{StaticResource IcoStepPrev}"
                                 Click="StepPrev_Click" ToolTip="Шаг на кадр назад (←)" />
-                        <Button x:Name="BtnPlayMini" Style="{StaticResource MiniPlayButton}" Content="▶"
+                        <Button x:Name="BtnPlayMini" Style="{StaticResource MiniPlayGlyphButton}"
+                                Tag="{StaticResource IcoPlay}"
                                 Click="PlayPause_Click" ToolTip="Воспроизведение / пауза (Space)" />
-                        <Button x:Name="BtnNextMini" Style="{StaticResource MiniTransportButton}" Content="|▶"
+                        <Button x:Name="BtnNextMini" Style="{StaticResource MiniGlyphButton}"
+                                Tag="{StaticResource IcoStepNext}"
                                 Click="StepNext_Click" ToolTip="Шаг на кадр вперёд (→)" />
-                        <Button x:Name="BtnShuttleFwdMini" Style="{StaticResource MiniTransportButton}" Content="▶▶"
+                        <Button x:Name="BtnShuttleFwdMini" Style="{StaticResource MiniGlyphButton}"
+                                Tag="{StaticResource IcoShuttleFwd}"
                                 Click="ShuttleForward_Click" ToolTip="Шаттл вперёд (L)" />
                     </StackPanel>
 
@@ -555,8 +648,8 @@
                                    Foreground="{StaticResource TrackBBrush}" />
                         <!-- Звук и в свёрнутом виде правится целиком: громкость нужна не
                              реже транспорта, а разворачивать таймлайн ради неё незачем -->
-                        <Button x:Name="BtnMuteMini" Style="{StaticResource TimelineButton}" Content="🔊"
-                                Margin="10,0,6,0" Padding="7,1" Click="Mute_Click"
+                        <Button x:Name="BtnMuteMini" Style="{StaticResource MiniIconButton}"
+                                Tag="{StaticResource IcoVolume}" Margin="10,0,6,0" Click="Mute_Click"
                                 ToolTip="Звук мастер-трека: включить или выключить (Ctrl+M)" />
                         <Slider x:Name="VolumeSliderMini" Style="{StaticResource VolumeSlider}" Width="72"
                                 ValueChanged="Volume_Changed"
@@ -564,8 +657,8 @@
                         <TextBlock x:Name="TxtVolumeMini" Margin="6,0,0,0" VerticalAlignment="Center" MinWidth="34"
                                    FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                                    Foreground="{StaticResource MutedBrush}" />
-                        <Button x:Name="BtnExpand" Style="{StaticResource TimelineButton}" Content="▴"
-                                Margin="10,0,0,0" Padding="9,1" Click="ToggleCompact_Click"
+                        <Button x:Name="BtnExpand" Style="{StaticResource MiniIconButton}"
+                                Tag="{StaticResource IcoExpand}" Margin="10,0,0,0" Click="ToggleCompact_Click"
                                 ToolTip="Развернуть таймлайн (Ctrl+T)" />
                     </StackPanel>
                 </Grid>
@@ -578,16 +671,23 @@
              перенесённого на вторую строку. -->
         <WrapPanel x:Name="TransportRow" Grid.Row="5" Orientation="Horizontal" Margin="14,10,14,12"
                    VerticalAlignment="Center">
-            <Button x:Name="BtnShuttleBack" Style="{StaticResource TransportButton}" Content="◀◀"
+            <Button x:Name="BtnShuttleBack" Style="{StaticResource GlyphButton}"
+                    Tag="{StaticResource IcoShuttleBack}"
                     Click="ShuttleBack_Click" ToolTip="Шаттл назад: повторное нажатие вдвое быстрее (J)" />
-            <Button x:Name="BtnPrev" Style="{StaticResource TransportButton}" Content="◀|" Click="StepPrev_Click"
-                    ToolTip="Шаг на кадр назад (←); с Shift — крупный шаг" />
-            <Button x:Name="BtnPlay" Style="{StaticResource PlayButton}" Content="▶" Click="PlayPause_Click"
-                    ToolTip="Воспроизведение / пауза (Space); K останавливает шаттл" />
-            <Button x:Name="BtnNext" Style="{StaticResource TransportButton}" Content="|▶" Click="StepNext_Click"
-                    ToolTip="Шаг на кадр вперёд (→); с Shift — крупный шаг" />
-            <Button x:Name="BtnShuttleFwd" Style="{StaticResource TransportButton}" Content="▶▶"
+            <Button x:Name="BtnPrev" Style="{StaticResource GlyphButton}" Tag="{StaticResource IcoStepPrev}"
+                    Click="StepPrev_Click" ToolTip="Шаг на кадр назад (←); с Shift — крупный шаг" />
+            <Button x:Name="BtnPlay" Style="{StaticResource PlayGlyphButton}" Tag="{StaticResource IcoPlay}"
+                    Click="PlayPause_Click" ToolTip="Воспроизведение / пауза (Space); K останавливает шаттл" />
+            <Button x:Name="BtnNext" Style="{StaticResource GlyphButton}" Tag="{StaticResource IcoStepNext}"
+                    Click="StepNext_Click" ToolTip="Шаг на кадр вперёд (→); с Shift — крупный шаг" />
+            <Button x:Name="BtnShuttleFwd" Style="{StaticResource GlyphButton}"
+                    Tag="{StaticResource IcoShuttleFwd}"
                     Click="ShuttleForward_Click" ToolTip="Шаттл вперёд: повторное нажатие вдвое быстрее (L)" />
+
+            <!-- «В начало» — команда транспорта, и стоять ей рядом с шагом, а не
+                 в конце строки среди прочего (задача #32) -->
+            <Button x:Name="BtnStart" Style="{StaticResource GlyphButton}" Tag="{StaticResource IcoToStart}"
+                    Click="ToStart_Click" ToolTip="В начало отрезка (Home); Shift+Home — начало шкалы" />
 
             <TextBlock x:Name="TxtTime" Margin="10,0,0,0" VerticalAlignment="Center"
                        FontFamily="{StaticResource MonoFont}" FontSize="19" />
@@ -607,25 +707,26 @@
                            Foreground="{StaticResource TrackBBrush}" />
             </Border>
 
-            <Button x:Name="BtnStart" Style="{StaticResource ToolButton}" Content="В начало" Margin="16,0,0,0"
-                    Click="ToStart_Click" ToolTip="Начало отрезка (Home); Shift+Home — начало шкалы" />
-
             <!-- Скорость воспроизведения: на шаг и seek не влияет, только на ход
                  воспроизведения; задаётся обоим трекам одинаковой. -->
-            <TextBlock Text="скорость" Margin="10,0,8,0" VerticalAlignment="Center"
-                       FontSize="12.5" Foreground="{StaticResource MutedBrush}" />
-            <Button x:Name="BtnSpeedDown" Style="{StaticResource TimelineButton}" Content="−"
-                    Margin="0,0,4,0" Click="SpeedDown_Click" ToolTip="Медленнее на 0,25×" />
+            <Path Data="{StaticResource IcoSpeed}" Stretch="Uniform" Width="16" Height="16"
+                  Margin="12,0,8,0" VerticalAlignment="Center" StrokeThickness="1.5"
+                  StrokeLineJoin="Round" Stroke="{StaticResource MutedBrush}"
+                  ToolTip="Скорость воспроизведения" />
+            <Button x:Name="BtnSpeedDown" Style="{StaticResource TimelineIconButton}"
+                    Tag="{StaticResource IcoMinus}" Margin="0,0,4,0" Click="SpeedDown_Click"
+                    ToolTip="Медленнее на 0,25×" />
             <TextBox x:Name="TxtSpeed" Style="{StaticResource SpeedBox}" Text="1"
                      KeyDown="Speed_KeyDown" LostFocus="Speed_LostFocus"
                      ToolTip="Скорость воспроизведения: введите число и нажмите Enter" />
-            <Button x:Name="BtnSpeedUp" Style="{StaticResource TimelineButton}" Content="+"
-                    Margin="4,0,0,0" Click="SpeedUp_Click" ToolTip="Быстрее на 0,25×" />
+            <Button x:Name="BtnSpeedUp" Style="{StaticResource TimelineIconButton}"
+                    Tag="{StaticResource IcoPlus}" Margin="4,0,0,0" Click="SpeedUp_Click"
+                    ToolTip="Быстрее на 0,25×" />
 
             <!-- Звук (задача #20): звучит только мастер-трек, ведомый приглушён всегда,
                  иначе два ролика накладывались бы друг на друга. -->
-            <Button x:Name="BtnMute" Style="{StaticResource TimelineButton}" Content="🔊"
-                    Margin="14,0,8,0" Click="Mute_Click"
+            <Button x:Name="BtnMute" Style="{StaticResource TimelineIconButton}"
+                    Tag="{StaticResource IcoVolume}" Margin="14,0,8,0" Click="Mute_Click"
                     ToolTip="Звук мастер-трека: включить или выключить (Ctrl+M)" />
             <Slider x:Name="VolumeSlider" Style="{StaticResource VolumeSlider}" Width="96"
                     ValueChanged="Volume_Changed"
@@ -666,15 +767,20 @@
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
-                            <Button x:Name="BtnShuttleBackFs" Style="{StaticResource MiniTransportButton}" Content="◀◀"
+                            <Button x:Name="BtnShuttleBackFs" Style="{StaticResource MiniGlyphButton}"
+                                    Tag="{StaticResource IcoShuttleBack}"
                                     Click="ShuttleBack_Click" ToolTip="Шаттл назад (J)" />
-                            <Button x:Name="BtnPrevFs" Style="{StaticResource MiniTransportButton}" Content="◀|"
+                            <Button x:Name="BtnPrevFs" Style="{StaticResource MiniGlyphButton}"
+                                    Tag="{StaticResource IcoStepPrev}"
                                     Click="StepPrev_Click" ToolTip="Шаг на кадр назад (←)" />
-                            <Button x:Name="BtnPlayFs" Style="{StaticResource MiniPlayButton}" Content="▶"
+                            <Button x:Name="BtnPlayFs" Style="{StaticResource MiniPlayGlyphButton}"
+                                    Tag="{StaticResource IcoPlay}"
                                     Click="PlayPause_Click" ToolTip="Воспроизведение / пауза (Space)" />
-                            <Button x:Name="BtnNextFs" Style="{StaticResource MiniTransportButton}" Content="|▶"
+                            <Button x:Name="BtnNextFs" Style="{StaticResource MiniGlyphButton}"
+                                    Tag="{StaticResource IcoStepNext}"
                                     Click="StepNext_Click" ToolTip="Шаг на кадр вперёд (→)" />
-                            <Button x:Name="BtnShuttleFwdFs" Style="{StaticResource MiniTransportButton}" Content="▶▶"
+                            <Button x:Name="BtnShuttleFwdFs" Style="{StaticResource MiniGlyphButton}"
+                                    Tag="{StaticResource IcoShuttleFwd}"
                                     Click="ShuttleForward_Click" ToolTip="Шаттл вперёд (L)" />
                         </StackPanel>
 
@@ -684,11 +790,12 @@
                             <TextBlock x:Name="TxtFrameBFs" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
                                        FontSize="11.5" VerticalAlignment="Center"
                                        Foreground="{StaticResource TrackBBrush}" />
-                            <Button x:Name="FsScale" Style="{StaticResource TimelineButton}" Content="Вписать"
-                                    Margin="12,0,0,0" Click="Scale_Click"
+                            <Button x:Name="FsScale" Style="{StaticResource MiniIconButton}"
+                                    Tag="{StaticResource IcoScaleFit}" Margin="12,0,0,0" Click="Scale_Click"
                                     ToolTip="Кадр в области: вписать / заполнить / растянуть (Z)" />
-                            <Button x:Name="BtnExitFs" Style="{StaticResource TimelineButton}" Content="⤢"
-                                    Margin="6,0,0,0" Padding="9,1" Click="FullScreen_Click"
+                            <Button x:Name="BtnExitFs" Style="{StaticResource MiniIconButton}"
+                                    Tag="{StaticResource IcoExitFullscreen}" Margin="6,0,0,0"
+                                    Click="FullScreen_Click"
                                     ToolTip="Выйти из полноэкранного режима (F11, Esc)" />
                         </StackPanel>
                     </Grid>

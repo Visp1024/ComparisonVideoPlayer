@@ -108,7 +108,7 @@
                         <TextBlock Style="{StaticResource PanelHint}" Margin="24,-4,0,8"
                                    Text="файлы, сдвиг, отрезки и позиция. Ролики, открытые из командной строки, сильнее сессии." />
                         <CheckBox x:Name="ChkOverlay" Style="{StaticResource SettingsCheck}"
-                                  Content="Таймкод и номер кадра поверх изображения (T)" />
+                                  Content="Накладка над кадром: имя файла, таймкод, номер кадра (T)" />
                         <CheckBox x:Name="ChkSnap" Style="{StaticResource SettingsCheck}"
                                   Content="Притягивать playhead и ручки отрезка к границам (S)" />
                         <CheckBox x:Name="ChkLoop" Style="{StaticResource SettingsCheck}"

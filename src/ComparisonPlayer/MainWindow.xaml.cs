@@ -61,6 +61,12 @@ public partial class MainWindow : AppWindow
     private LayoutMode _layout = LayoutMode.Side;
     private SideMode _side = SideMode.None;
 
+    /// <summary>
+    /// Таблетки раскладки и мастер-трека (задача #32) выставляются и из кода — тогда
+    /// событие Checked приходит по нашей же правке, и обрабатывать его нельзя.
+    /// </summary>
+    private bool _syncingSegments;
+
     /// <summary>Какой трек показывает боковая панель.</summary>
     private TrackId _sideTrack = TrackId.A;
 
@@ -192,6 +198,7 @@ public partial class MainWindow : AppWindow
         OverlayB.Drop += (s, args) => OnDrop(s, args, TrackId.B);
 
         _showOsd = App.Settings.ShowOverlay;
+        ApplyOverlay();
 
         UpdateState();
         Status(string.IsNullOrEmpty(AppEnv.FFmpegDir)
@@ -335,9 +342,8 @@ public partial class MainWindow : AppWindow
     private void Info_Click(object sender, RoutedEventArgs e) => ToggleSide(SideMode.Info);
     private void Cache_Click(object sender, RoutedEventArgs e) => ToggleSide(SideMode.Cache);
     private void SideClose_Click(object sender, RoutedEventArgs e) => ToggleSide(_side);
-    private void Layout_Click(object sender, RoutedEventArgs e) => CycleLayout();
-    private void Master_Click(object sender, RoutedEventArgs e) => MakeActiveMaster();
-    private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings();
+    private void SettingsOpen_Click(object sender, RoutedEventArgs e) => OpenSettings();
+    private void SettingsKeys_Click(object sender, RoutedEventArgs e) => OpenSettings(SettingsWindow.KeysPage);
 
     private void ToStart_Click(object sender, RoutedEventArgs e)
     {
@@ -346,12 +352,12 @@ public partial class MainWindow : AppWindow
     }
 
     /// <summary>
-    /// Флажок панели инструментов: настройку меняют по ходу просмотра, поэтому она
+    /// Флажок в меню шестерёнки: настройку меняют по ходу просмотра, поэтому она
     /// сохраняется сразу, без «применить». Тот же флажок есть в окне настроек.
     /// </summary>
     private void PauseOnSeek_Click(object sender, RoutedEventArgs e)
     {
-        App.Settings.PauseOnSeek = ChkPauseOnSeek.IsChecked == true;
+        App.Settings.PauseOnSeek = MnuPauseOnSeek.IsChecked;
         App.Settings.Save();
 
         Status(App.Settings.PauseOnSeek
@@ -359,12 +365,19 @@ public partial class MainWindow : AppWindow
             : "переход по таймлайну не прерывает воспроизведение");
     }
 
-    /// <summary>Меню сессии открываем нажатием: отдельная кнопка на каждый пункт заняла бы всю панель.</summary>
-    private void Session_Click(object sender, RoutedEventArgs e)
-    {
-        if (BtnSession.ContextMenu is not { } menu) return;
+    private void File_Click(object sender, RoutedEventArgs e) => DropMenu(BtnFile);
+    private void Settings_Click(object sender, RoutedEventArgs e) => DropMenu(BtnSettings);
 
-        menu.PlacementTarget = BtnSession;
+    /// <summary>
+    /// Меню кнопки панели (задача #32): «Файл» и шестерёнка прячут за собой по три-четыре
+    /// команды каждая — отдельная кнопка на каждую занимала всю панель. Меню открывается
+    /// левой кнопкой и под кнопкой, а не там, где системное контекстное.
+    /// </summary>
+    private static void DropMenu(Button button)
+    {
+        if (button.ContextMenu is not { } menu) return;
+
+        menu.PlacementTarget = button;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
     }
@@ -509,38 +522,82 @@ public partial class MainWindow : AppWindow
         UpdateState();
     }
 
-    private void MakeActiveMaster()
+    private void MakeActiveMaster() => MakeMaster(_active);
+
+    /// <summary>Щелчок по сегменту таблетки мастер-трека (задача #32).</summary>
+    private void Master_Checked(object sender, RoutedEventArgs e)
     {
-        if (!Active.IsOpen)
+        if (_syncingSegments) return;
+
+        MakeMaster(ReferenceEquals(sender, SegMasterB) ? TrackId.B : TrackId.A);
+    }
+
+    /// <summary>
+    /// Назначить мастера. С клавиши (M) им становится активный трек, щелчком по
+    /// таблетке — любой: раньше, чтобы сделать мастером второй трек, приходилось
+    /// сперва переключать активный.
+    /// </summary>
+    private void MakeMaster(TrackId id)
+    {
+        var track = id == TrackId.A ? _a : _b;
+
+        if (!track.IsOpen)
         {
-            Status($"трек {Active.Letter} пуст — мастером его не сделать");
+            Status($"трек {track.Letter} пуст — мастером его не сделать");
+            UpdateTimelineButtons();
             return;
         }
 
-        if (_sync.MasterId == _active)
+        if (_sync.MasterId == id)
         {
-            Status($"трек {Active.Letter} уже мастер: шаг меряется его кадрами");
+            Status($"трек {track.Letter} уже мастер: шаг меряется его кадрами");
             return;
         }
 
-        _sync.SetMaster(_active);
+        _sync.SetMaster(id);
         SeekFrame(_sync.PositionFrame);
         UpdateState();
 
         // Звук переехал вместе с мастером — об этом стоит сказать сразу, иначе
         // смена звучащего трека выглядит как самоволие плеера.
         var audio = _sync.HasAudio && !_sync.Muted && _sync.Volume > 0 ? " и звук" : "";
-        Status($"мастер — трек {Active.Letter}: шаг меряется его кадрами ({Active.Fps:0.###} fps){audio}");
+        Status($"мастер — трек {track.Letter}: шаг меряется его кадрами ({track.Fps:0.###} fps){audio}");
     }
 
+    /// <summary>
+    /// Переключение раскладки по кругу (V). Без второго ролика выбирать не из чего:
+    /// «только B» вело бы в пустой экран, поэтому вместо переключения плеер говорит
+    /// об этом в строке состояния (задача #32).
+    /// </summary>
     private void CycleLayout()
     {
-        _layout = _layout switch
+        if (!BothOpen())
+        {
+            Status("раскладка нужна двум роликам: второй трек не открыт");
+            return;
+        }
+
+        SetLayout(_layout switch
         {
             LayoutMode.Side => LayoutMode.OnlyA,
             LayoutMode.OnlyA => LayoutMode.OnlyB,
             _ => LayoutMode.Side
-        };
+        });
+    }
+
+    /// <summary>Щелчок по сегменту таблетки раскладки.</summary>
+    private void Layout_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_syncingSegments) return;
+
+        SetLayout(ReferenceEquals(sender, SegLayoutA) ? LayoutMode.OnlyA
+            : ReferenceEquals(sender, SegLayoutB) ? LayoutMode.OnlyB
+            : LayoutMode.Side);
+    }
+
+    private void SetLayout(LayoutMode mode)
+    {
+        _layout = mode;
 
         ApplyLayout();
         Status(_layout switch
@@ -553,8 +610,16 @@ public partial class MainWindow : AppWindow
 
     private void ApplyLayout()
     {
-        var showA = _layout != LayoutMode.OnlyB;
-        var showB = _layout != LayoutMode.OnlyA;
+        // Выбранный трек могли закрыть — тогда раскладка показала бы пустоту.
+        var layout = _layout switch
+        {
+            LayoutMode.OnlyA when !_a.IsOpen && _b.IsOpen => LayoutMode.OnlyB,
+            LayoutMode.OnlyB when !_b.IsOpen && _a.IsOpen => LayoutMode.OnlyA,
+            _ => _layout
+        };
+
+        var showA = layout != LayoutMode.OnlyB;
+        var showB = layout != LayoutMode.OnlyA;
 
         PaneA.Visibility = showA ? Visibility.Visible : Visibility.Collapsed;
         PaneB.Visibility = showB ? Visibility.Visible : Visibility.Collapsed;
@@ -562,12 +627,11 @@ public partial class MainWindow : AppWindow
         PaneAColumn.Width = showA ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         PaneBColumn.Width = showB ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
 
-        BtnLayout.Content = _layout switch
-        {
-            LayoutMode.OnlyA => "Только A",
-            LayoutMode.OnlyB => "Только B",
-            _ => "Рядом"
-        };
+        _syncingSegments = true;
+        SegLayoutA.IsChecked = layout == LayoutMode.OnlyA;
+        SegLayoutB.IsChecked = layout == LayoutMode.OnlyB;
+        SegLayoutBoth.IsChecked = layout == LayoutMode.Side;
+        _syncingSegments = false;
     }
 
     /// <summary>Открыть или свернуть боковую панель; открытой всегда одна из двух.</summary>
@@ -614,12 +678,32 @@ public partial class MainWindow : AppWindow
     /// <summary>Таймкод и номер кадра поверх изображения (клавиша T).</summary>
     private bool _showOsd = true;
 
+    private void Overlay_Click(object sender, RoutedEventArgs e) => ToggleOverlay();
+
     private void ToggleOverlay()
     {
         _showOsd = !_showOsd;
         App.Settings.ShowOverlay = _showOsd;
+
+        ApplyOverlay();
         UpdatePosition();
-        Status(_showOsd ? "таймкод поверх кадра включён (T)" : "таймкод поверх кадра выключен (T)");
+        Status(_showOsd ? "накладка над кадром включена (T)" : "накладка над кадром выключена (T)");
+    }
+
+    /// <summary>
+    /// Накладка над кадром — плашка с именем файла, таймкодом, номером кадра и ролью
+    /// трека. Прячется целиком (задача #32): выключенной оставалась половина плашки,
+    /// и «кадр без накладки» получить было нечем. В полноэкранном виде её нет всегда —
+    /// там на экране остаётся только кадр (задача #28).
+    /// </summary>
+    private void ApplyOverlay()
+    {
+        var shown = _showOsd && !_fullscreen ? Visibility.Visible : Visibility.Collapsed;
+
+        PaneLabelA.Visibility = shown;
+        PaneLabelB.Visibility = shown;
+
+        Highlight(BtnOverlay, _showOsd);
     }
 
     // ---------- открытие файлов ----------
@@ -810,7 +894,7 @@ public partial class MainWindow : AppWindow
     {
         _loop = App.Settings.LoopSegment;
         Timeline.SnapEnabled = App.Settings.SnapToFrames;
-        ChkPauseOnSeek.IsChecked = App.Settings.PauseOnSeek;
+        MnuPauseOnSeek.IsChecked = App.Settings.PauseOnSeek;
 
         Timeline.ScrubStarted += (_, _) =>
         {
@@ -1192,7 +1276,7 @@ public partial class MainWindow : AppWindow
         var silent = _sync.Muted || _sync.Volume == 0;
         var audible = _sync.HasAudio && !silent;
 
-        BtnMute.Content = BtnMuteMini.Content = silent ? "🔇" : "🔊";
+        BtnMute.Tag = BtnMuteMini.Tag = FindResource(silent ? "IcoMute" : "IcoVolume");
         Highlight(BtnMute, audible);
         Highlight(BtnMuteMini, audible);
 
@@ -1291,9 +1375,10 @@ public partial class MainWindow : AppWindow
         App.Settings.Save();
 
         _showOsd = changed.ShowOverlay;
+        ApplyOverlay();
         _loop = changed.LoopSegment;
         Timeline.SnapEnabled = changed.SnapToFrames;
-        ChkPauseOnSeek.IsChecked = changed.PauseOnSeek;
+        MnuPauseOnSeek.IsChecked = changed.PauseOnSeek;
 
         RbAutoHint.Text = $"строить, если шаг назад медленнее {changed.StepBackThresholdMs} мс";
 
@@ -1371,8 +1456,15 @@ public partial class MainWindow : AppWindow
         var open = _sync.IsOpen;
         BtnZoomIn.IsEnabled = BtnZoomOut.IsEnabled = BtnFit.IsEnabled = open;
         BtnIn.IsEnabled = BtnOut.IsEnabled = BtnSegReset.IsEnabled = Active.IsOpen;
-        BtnMaster.IsEnabled = open;
-        BtnMaster.Content = _sync.Master is { } master ? $"Мастер: {master.Letter}" : "Мастер: —";
+
+        MasterPill.IsEnabled = open;
+        SegMasterA.IsEnabled = _a.IsOpen;
+        SegMasterB.IsEnabled = _b.IsOpen;
+
+        _syncingSegments = true;
+        SegMasterA.IsChecked = _sync.MasterId == TrackId.A && _a.IsOpen;
+        SegMasterB.IsChecked = _sync.MasterId == TrackId.B && _b.IsOpen;
+        _syncingSegments = false;
 
         UpdateZoomText();
         UpdateSegmentText();
@@ -1498,17 +1590,18 @@ public partial class MainWindow : AppWindow
     {
         var open = _sync.IsOpen;
 
-        BtnClose.IsEnabled = Active.IsOpen;
+        MnuClose.IsEnabled = Active.IsOpen;
         BtnPrev.IsEnabled = BtnNext.IsEnabled = BtnPlay.IsEnabled = BtnStart.IsEnabled = open;
-        BtnPlay.Content = _sync.IsPlaying ? "❚❚" : "▶";
+
+        // Фигура иконки живёт в Tag (задача #32): ▶ и ❚❚ — одна и та же кнопка.
+        var playIcon = FindResource(_sync.IsPlaying ? "IcoPause" : "IcoPlay");
+        BtnPlay.Tag = BtnPlayMini.Tag = BtnPlayFs.Tag = playIcon;
 
         BtnPrevMini.IsEnabled = BtnNextMini.IsEnabled = BtnPlayMini.IsEnabled = open;
         BtnShuttleBackMini.IsEnabled = BtnShuttleFwdMini.IsEnabled = open;
-        BtnPlayMini.Content = BtnPlay.Content;
 
         BtnPrevFs.IsEnabled = BtnNextFs.IsEnabled = BtnPlayFs.IsEnabled = open;
         BtnShuttleBackFs.IsEnabled = BtnShuttleFwdFs.IsEnabled = open;
-        BtnPlayFs.Content = BtnPlay.Content;
 
         EmptyA.Visibility = _a.IsOpen ? Visibility.Collapsed : Visibility.Visible;
         EmptyB.Visibility = _b.IsOpen ? Visibility.Collapsed : Visibility.Visible;
@@ -1526,7 +1619,8 @@ public partial class MainWindow : AppWindow
 
         FrameBadgeA.Visibility = _a.IsOpen ? Visibility.Visible : Visibility.Collapsed;
         FrameBadgeB.Visibility = _b.IsOpen ? Visibility.Visible : Visibility.Collapsed;
-        ModeBadgeB.Visibility = _b.IsOpen ? Visibility.Visible : Visibility.Collapsed;
+
+        UpdateTrackIndication();
 
         Title = _sync.OpenTracks.Any()
             ? "CVP — " + string.Join(" · ", _sync.OpenTracks.Select(t => $"{t.Letter}: {t.Media!.FileName}"))
@@ -1552,6 +1646,34 @@ public partial class MainWindow : AppWindow
         UpdateModeBadges();
         UpdateCachePanel();
         UpdatePosition();
+    }
+
+    /// <summary>Открыт ровно один ролик.</summary>
+    private bool SingleTrack => _a.IsOpen ^ _b.IsOpen;
+
+    /// <summary>
+    /// Буква трека что-то различает, только когда открыты оба ролика: одному кадру на
+    /// экране метка «A» ничего не сообщает, а место занимает (задача #32).
+    /// </summary>
+    private bool ShowTrackLetters => BothOpen();
+
+    /// <summary>
+    /// Пометки треков (задача #32). При одном открытом ролике исчезают буква над кадром,
+    /// буква в счётчике кадров (её убирает <see cref="ShowTrackLabels"/>), выбор раскладки
+    /// и вкладки A / B боковой панели — выбирать в них не из чего.
+    /// </summary>
+    private void UpdateTrackIndication()
+    {
+        var letters = ShowTrackLetters ? Visibility.Visible : Visibility.Collapsed;
+        PaneLetterA.Visibility = letters;
+        PaneLetterB.Visibility = letters;
+
+        var pair = BothOpen() ? Visibility.Visible : Visibility.Collapsed;
+        LayoutPill.Visibility = pair;
+        SideTabs.Visibility = pair;
+
+        // Панель показывала бы прочерки по закрытому треку — переводим её на открытый.
+        if (SingleTrack) _sideTrack = _a.IsOpen ? TrackId.A : TrackId.B;
     }
 
     /// <summary>Что открыто — в титульную полосу (задача #21).</summary>
@@ -1641,16 +1763,19 @@ public partial class MainWindow : AppWindow
         var frame = _sync.DisplayFrame(track);
         var approx = track.Media!.IsVariableFrameRate ? "≈" : "";
 
+        // Ролик открыт один — буква трека в счётчике кадров лишняя (задача #32).
+        var letter = ShowTrackLetters ? track.Letter + " " : "";
+
         badgeText.Text = frame is { } f
-            ? $"{track.Letter} {approx}{f} / {Math.Max(track.FrameCount - 1, 0)}"
-            : $"{track.Letter} —";
+            ? $"{letter}{approx}{f} / {Math.Max(track.FrameCount - 1, 0)}"
+            : $"{letter}—";
         badge.Opacity = frame is null ? 0.45 : 1;
 
         // В компактном подвале и в полноэкранной полосе места меньше: номер кадра
         // без общего числа.
         miniText.Text = fsText.Text = frame is { } mini
-            ? $"{track.Letter} {approx}{mini}"
-            : $"{track.Letter} —";
+            ? $"{letter}{approx}{mini}"
+            : $"{letter}—";
 
         osd.Text = _showOsd && frame is { } shown
             ? $"кадр {approx}{shown} · {Timecode(track.TimeOf(shown))}"

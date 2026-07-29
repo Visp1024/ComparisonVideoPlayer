@@ -63,9 +63,6 @@ public partial class MainWindow
         StatusBar.Visibility = full;
         CompactFooter.Visibility = _compact && !_fullscreen ? Visibility.Visible : Visibility.Collapsed;
 
-        BtnExpand.Content = "▴";
-        BtnCollapse.Content = "▾";
-
         // Развернувшийся таймлайн получает ширину только сейчас — до этого он был
         // скрыт, и масштаб «вся шкала в ширину окна» посчитать было не по чему.
         // Здесь же лениво снимаются превью: в свёрнутом виде их некуда показывать.

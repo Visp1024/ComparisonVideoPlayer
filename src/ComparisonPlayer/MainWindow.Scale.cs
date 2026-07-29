@@ -53,8 +53,17 @@ public partial class MainWindow
         foreach (var track in _sync.Tracks)
             track.Flyleaf.ApplyScale(_scale);
 
-        BtnScale.Content = FsScale.Content = ScaleName(_scale);
-        BtnScale.ToolTip = $"Кадр в области: {ScaleName(_scale).ToLowerInvariant()} — переключить (Z)";
+        // Иконка показывает текущий режим, а не следующий: кнопка переключается по кругу,
+        // и «что сейчас» — единственное, что о ней можно узнать не нажимая (задача #32).
+        BtnScale.Tag = FsScale.Tag = FindResource(_scale switch
+        {
+            VideoScaleMode.Fill => "IcoScaleFill",
+            VideoScaleMode.Stretch => "IcoScaleStretch",
+            _ => "IcoScaleFit"
+        });
+
+        var tip = $"Кадр в области: {ScaleName(_scale).ToLowerInvariant()} — переключить (Z)";
+        BtnScale.ToolTip = FsScale.ToolTip = tip;
     }
 
     private static string ScaleName(VideoScaleMode mode) => mode switch

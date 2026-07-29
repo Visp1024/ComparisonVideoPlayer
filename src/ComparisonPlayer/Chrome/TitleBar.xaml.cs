@@ -53,17 +53,20 @@ public partial class TitleBar : UserControl
     /// <summary>
     /// Показать в полосе, что открыто. Пустое имя убирает и букву трека, и разделитель:
     /// имена файлов задаются вместе, потому что разделитель нужен только между двумя.
+    /// Буквы появляются лишь когда открыты оба ролика — одному имени файла помечать
+    /// нечего (задача #32).
     /// </summary>
     public void ShowFiles(string? fileA, string? pathA, string? fileB, string? pathB)
     {
         var hasA = !string.IsNullOrEmpty(fileA);
         var hasB = !string.IsNullOrEmpty(fileB);
+        var letters = hasA && hasB;
 
-        LetterA.Visibility = hasA ? Visibility.Visible : Visibility.Collapsed;
+        LetterA.Visibility = letters ? Visibility.Visible : Visibility.Collapsed;
         NameA.Text = fileA ?? "";
         NameA.ToolTip = pathA;
 
-        LetterB.Visibility = hasB ? Visibility.Visible : Visibility.Collapsed;
+        LetterB.Visibility = letters ? Visibility.Visible : Visibility.Collapsed;
         NameB.Text = fileB ?? "";
         NameB.ToolTip = pathB;
 
