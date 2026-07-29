@@ -1,0 +1,8 @@
+{
+  "name": "Cvp.Link.Editor",
+  "rootNamespace": "Cvp.Editor",
+  "references": ["Cvp.Link"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "autoReferenced": true
+}
