@@ -1,0 +1,91 @@
+<chrome:AppWindow x:Class="ComparisonPlayer.RemoteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:chrome="clr-namespace:ComparisonPlayer.Chrome"
+        Title="Связь с Unity — CVP" Icon="app.ico"
+        Height="560" Width="520" MinHeight="460" MinWidth="460"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource PanelBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI" FontSize="14"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+
+    <Window.Resources>
+        <!-- Подпись поля: тот же стиль есть в SettingsWindow, но он объявлен там
+             локально, а не в App.xaml — ради двух строк выносить его в общие
+             ресурсы незачем. -->
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Своя титульная полоса: её высоту AppWindow отдаёт системе под заголовок,
+             без неё верх окна остался бы мёртвой полосой поверх содержимого -->
+        <chrome:TitleBar Grid.Row="0" Caption="Связь с Unity" ShowResizeButtons="False" />
+
+        <Grid Grid.Row="1" Margin="20,16,20,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0">
+                <CheckBox x:Name="ChkEnabled" Content="Внешнее управление" Margin="0,0,0,6" />
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource DimBrush}" FontSize="12"
+                           Margin="0,0,0,14"
+                           Text="Плеер слушает именованный канал Windows. Команды Unity управляют транспортом так же, как клавиши; отрезок и файлы задаются здесь, в плеере." />
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock Text="Имя канала" Style="{StaticResource FieldLabel}" Width="110" />
+                    <TextBox x:Name="TxtPipe" Width="200" FontFamily="{StaticResource MonoFont}" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                    <TextBlock Text="Состояние" Style="{StaticResource FieldLabel}" Width="110" />
+                    <TextBlock x:Name="TxtState" VerticalAlignment="Center" FontSize="13.5" />
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock Grid.Row="1" Text="К О М А Н Д Ы" Style="{StaticResource PanelHeader}" Margin="0,0,0,8" />
+
+            <TextBlock Grid.Row="2" Margin="0,0,0,16" TextWrapping="Wrap"
+                       FontFamily="{StaticResource MonoFont}" FontSize="12"
+                       Foreground="{StaticResource AccentBrush}"
+                       Text="play · pause · stop · rewind · loop" />
+
+            <DockPanel Grid.Row="3">
+                <TextBlock DockPanel.Dock="Top" Text="П О С Л Е Д Н И Е   С О Б Ы Т И Я"
+                           Style="{StaticResource PanelHeader}" Margin="0,0,0,8" />
+                <Border Background="{StaticResource BgBrush}" BorderBrush="{StaticResource LineBrush}"
+                        BorderThickness="1" CornerRadius="6" Padding="10,8">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="LogList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Margin="0,0,0,3" FontFamily="{StaticResource MonoFont}" FontSize="12"
+                                               Foreground="{StaticResource MutedBrush}" Text="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+            </DockPanel>
+
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="Отмена" Style="{StaticResource ToolButton}" IsCancel="True" Margin="0,0,8,0" />
+                <Button Content="Сохранить" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="Save_Click" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</chrome:AppWindow>

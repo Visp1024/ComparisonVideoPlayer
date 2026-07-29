@@ -83,6 +83,18 @@
                         Content="Кэш…" Margin="8,0,0,0" Click="Cache_Click"
                         ToolTip="Режим кэша кадров, объём хранилища (C)" />
 
+                <!-- Внешнее управление из Unity (задача #9): подсветка кнопки — включено ли
+                     оно, цвет точки — есть ли клиент на том конце -->
+                <Button x:Name="BtnUnity" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
+                        Margin="8,0,0,0" Click="Unity_Click"
+                        ToolTip="Внешнее управление плеером из Unity">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="UnityDot" Width="7" Height="7" Margin="0,0,6,0"
+                                 VerticalAlignment="Center" Fill="{StaticResource DimBrush}" />
+                        <TextBlock Text="Unity" />
+                    </StackPanel>
+                </Button>
+
                 <Button x:Name="BtnBuildCancel" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
                         Content="Отменить" Margin="8,0,0,0" Visibility="Collapsed" Click="CacheCancel_Click"
                         ToolTip="Остановить сборку кэша" />

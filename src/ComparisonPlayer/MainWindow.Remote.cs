@@ -1,4 +1,6 @@
 using System.IO;
+using System.Windows;
+using System.Windows.Media;
 using ComparisonPlayer.Remote;
 
 namespace ComparisonPlayer;
@@ -15,8 +17,48 @@ public partial class MainWindow
 
     private void InitRemote()
     {
-        // На время задачи #9 сервер поднимается всегда; тумблер появится следующей задачей.
-        _ = StartRemote(App.Settings.RemotePipeName);
+        if (App.Settings.RemoteEnabled && !StartRemote(App.Settings.RemotePipeName))
+        {
+            // Канал занят ещё с прошлого запуска или другим плеером: настройка не
+            // должна утверждать, что управление работает.
+            App.Settings.RemoteEnabled = false;
+            App.Settings.Save();
+        }
+
+        UpdateRemoteButton();
+    }
+
+    private void Unity_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new RemoteWindow(
+            App.Settings.RemoteEnabled, App.Settings.RemotePipeName, _remoteLog,
+            () => _remoteServer?.ClientCount) { Owner = this };
+
+        if (dialog.ShowDialog() != true) return;
+
+        App.Settings.RemotePipeName = dialog.ResultPipeName;
+
+        if (dialog.ResultEnabled) App.Settings.RemoteEnabled = StartRemote(dialog.ResultPipeName);
+        else { StopRemote(); App.Settings.RemoteEnabled = false; }
+
+        App.Settings.Save();
+        UpdateRemoteButton();
+
+        if (dialog.ResultEnabled && !App.Settings.RemoteEnabled)
+            Status($"Имя канала «{dialog.ResultPipeName}» занято другим процессом");
+    }
+
+    /// <summary>
+    /// Подсветка кнопки — включено ли управление, цвет точки — есть ли клиент.
+    /// Два разных вопроса, и пользователю нужны ответы на оба сразу.
+    /// </summary>
+    private void UpdateRemoteButton()
+    {
+        var running = _remoteServer is not null;
+        var connected = _remoteServer is { ClientCount: > 0 };
+
+        Highlight(BtnUnity, running);
+        UnityDot.Fill = (Brush)FindResource(!running ? "DimBrush" : connected ? "OkBrush" : "WarnBrush");
     }
 
     /// <summary>Поднять сервер; false — имя канала занято другим процессом.</summary>
@@ -26,6 +68,7 @@ public partial class MainWindow
 
         var server = new PipeServer(pipeName, _remoteLog);
         server.CommandReceived += (_, command) => Dispatcher.BeginInvoke(() => ApplyRemote(command));
+        server.ClientsChanged += (_, _) => Dispatcher.BeginInvoke(UpdateRemoteButton);
 
         try
         {
