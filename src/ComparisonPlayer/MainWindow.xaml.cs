@@ -48,8 +48,8 @@ public partial class MainWindow : AppWindow
     /// </summary>
     private static string[] VideoExtensions => FileAssociations.VideoExtensions;
 
-    private readonly PlayerTrack _a = new(TrackId.A);
-    private readonly PlayerTrack _b = new(TrackId.B);
+    private readonly PlayerTrack _a;
+    private readonly PlayerTrack _b;
     private readonly SyncEngine _sync;
 
     /// <summary>Активный трек: ему адресованы открытие файла, отрезок и назначение мастера.</summary>
@@ -87,7 +87,13 @@ public partial class MainWindow : AppWindow
 
     public MainWindow()
     {
+        StartupTrace.Mark("win-ctor");
         InitializeComponent();
+        StartupTrace.Mark("xaml");
+
+        _a = new PlayerTrack(TrackId.A);
+        _b = new PlayerTrack(TrackId.B);
+        StartupTrace.Mark("players");
 
         _sync = new SyncEngine(_a, _b);
         _sync.PositionChanged += (_, _) => Dispatcher.BeginInvoke(UpdatePosition);
@@ -134,6 +140,14 @@ public partial class MainWindow : AppWindow
         Drop += (s, e) => OnDrop(s, e, _active);
 
         InitRemote();
+        StartupTrace.Mark("ctor-done");
+
+        if (StartupTrace.Enabled)
+            ContentRendered += (_, _) =>
+            {
+                StartupTrace.Mark("shown");
+                StartupTrace.Flush();
+            };
     }
 
     private PlayerTrack Active => _sync.Track(_active);
@@ -141,8 +155,11 @@ public partial class MainWindow : AppWindow
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        StartupTrace.Mark("loaded");
+
         VideoHostA.Player = _a.Flyleaf.Player;
         VideoHostB.Player = _b.Flyleaf.Player;
+        StartupTrace.Mark("hosts");
 
         InitCacheUi();
         InitTimeline();
@@ -173,6 +190,7 @@ public partial class MainWindow : AppWindow
                 opened |= OpenFile(_b, second);
 
             ApplyStartupLayout();
+            StartupTrace.Mark("files");
             if (opened) AutoPlayAfterOpen();
             return;
         }
@@ -180,6 +198,7 @@ public partial class MainWindow : AppWindow
         // Файлы из командной строки сильнее сессии: их открыли осознанно именно сейчас.
         RestoreLastSession();
         ApplyStartupLayout();
+        StartupTrace.Mark("files");
     }
 
     /// <summary>

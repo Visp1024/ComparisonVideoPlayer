@@ -28,12 +28,15 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        StartupTrace.Mark("entry");
+
         var files = e.Args.Where(a => !a.StartsWith('-')).ToList();
         StartupFile = files.FirstOrDefault();
         StartupFileB = files.Skip(1).FirstOrDefault();
         Settings = Settings.Load();
         Directory.CreateDirectory(AppEnv.DataDir);
         AppEnv.CleanupEngineLogs();
+        StartupTrace.Mark("settings");
 
         // Библиотек нет — предлагаем скачать их до старта движка. Иначе Engine.Start
         // упадёт и единственным выходом останется идти за сборкой FFmpeg руками.
@@ -80,6 +83,7 @@ public partial class App : Application
             return;
         }
 
+        StartupTrace.Mark("engine");
         base.OnStartup(e);
     }
 
