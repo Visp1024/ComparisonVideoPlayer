@@ -126,6 +126,8 @@ public partial class MainWindow : AppWindow
 
         DragOver += OnDragOver;
         Drop += (s, e) => OnDrop(s, e, _active);
+
+        InitRemote();
     }
 
     private PlayerTrack Active => _sync.Track(_active);
@@ -226,6 +228,8 @@ public partial class MainWindow : AppWindow
             CancelBuild(track);
             CancelThumbnails(track);
         }
+
+        StopRemote();
 
         _sync.Dispose();
         _a.Dispose();
