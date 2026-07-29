@@ -100,6 +100,8 @@ public partial class MainWindow : AppWindow
         InitializeComponent();
         StartupTrace.Mark("xaml");
 
+        PrepareFirstFrame();
+
         Closed += OnClosed;
         ContentRendered += OnFirstFrame;
     }
@@ -200,9 +202,8 @@ public partial class MainWindow : AppWindow
         OverlayB.DragLeave += OnDragLeave;
         OverlayB.Drop += (s, args) => OnDrop(s, args, TrackId.B);
 
-        _showOsd = App.Settings.ShowOverlay;
-        ApplyOverlay();
-
+        // Накладка, масштаб кадра и звук расставлены по настройкам ещё до первой
+        // отрисовки (PrepareFirstFrame): здесь их берут уже треки и движок.
         UpdateState();
         Status(string.IsNullOrEmpty(AppEnv.FFmpegDir)
             ? "FFmpeg не найден — открыть файл не получится"
@@ -269,19 +270,77 @@ public partial class MainWindow : AppWindow
     /// </summary>
     private void ApplyStartupLayout()
     {
-        LayoutMode? wanted = App.Settings.StartupLayout switch
-        {
-            StartupLayoutMode.Side => LayoutMode.Side,
-            StartupLayoutMode.OnlyA => LayoutMode.OnlyA,
-            StartupLayoutMode.OnlyB => LayoutMode.OnlyB,
-            _ => null
-        };
-
-        if (wanted is not { } layout || layout == _layout) return;
+        if (StartupLayoutSetting() is not { } layout || layout == _layout) return;
 
         _layout = layout;
         ApplyLayout();
     }
+
+    /// <summary>Вид кадра из настройки; null — «как в прошлый раз», выбора нет.</summary>
+    private static LayoutMode? StartupLayoutSetting() => App.Settings.StartupLayout switch
+    {
+        StartupLayoutMode.Side => LayoutMode.Side,
+        StartupLayoutMode.OnlyA => LayoutMode.OnlyA,
+        StartupLayoutMode.OnlyB => LayoutMode.OnlyB,
+        _ => null
+    };
+
+    /// <summary>
+    /// Привести окно к тому виду, в котором оно откроется, ещё до первой отрисовки
+    /// (задача #37). Раньше вид приходил из <see cref="OpenStartupFiles"/> — то есть уже
+    /// после показа окна, — и человек успевал увидеть, как кадры из «рядом» схлопываются
+    /// в один настроенный вид, а пометки треков исчезают.
+    /// </summary>
+    /// <remarks>
+    /// Ни треков, ни движка здесь ещё нет: их создание отложено до первого показа окна
+    /// (задача #31). Поэтому занятость треков берётся из файлов, которые вот-вот откроют:
+    /// командной строки, а без неё — прошлой сессии. Ошибиться это может только на файле,
+    /// который есть на диске, но не откроется; тогда раскладку поправит
+    /// <see cref="ApplyLayout()"/> по-настоящему открытым трекам.
+    /// </remarks>
+    private void PrepareFirstFrame()
+    {
+        string? fileA, fileB;
+
+        if (App.StartupFile is { } file)
+        {
+            fileA = file;
+            fileB = App.StartupFileB;
+        }
+        else
+        {
+            fileA = StartupSession()?.A.File;
+            fileB = StartupSession()?.B.File;
+        }
+
+        var openA = WillOpen(fileA);
+        var openB = WillOpen(fileB);
+
+        // Настройка сильнее сессии — так же, как в ApplyStartupLayout после открытия
+        // файлов. «Как в прошлый раз» берёт вид из сессии, но только если из неё что-то
+        // откроется: сессия без единого файла не восстанавливается и вида не меняет.
+        _layout = StartupLayoutSetting()
+                  ?? (App.StartupFile is null && (openA || openB)
+                      && Enum.TryParse<LayoutMode>(StartupSession()!.Layout, out var saved)
+                          ? saved
+                          : LayoutMode.Side);
+
+        ApplyLayout(openA, openB);
+        ApplyTrackIndication(openA, openB);
+
+        // Остальные режимы, которые видно в первом же кадре окна: масштаб кадра и
+        // накладку над ним переключают кнопками панели, звук — кнопкой свёрнутого
+        // подвала. Все три приходят из настроек, и знать их движок не обязан.
+        PrepareScale();
+
+        _showOsd = App.Settings.ShowOverlay;
+        ApplyOverlay();
+
+        ShowVolume(App.Settings.Volume, App.Settings.Muted, hasAudio: false, isOpen: false);
+    }
+
+    /// <summary>Файл назван и лежит на месте — значит, трек будет занят.</summary>
+    private static bool WillOpen(string? path) => !string.IsNullOrEmpty(path) && File.Exists(path);
 
     /// <summary>
     /// Пустить воспроизведение сразу после открытия ролика, если так настроено
@@ -611,13 +670,20 @@ public partial class MainWindow : AppWindow
         });
     }
 
-    private void ApplyLayout()
+    private void ApplyLayout() => ApplyLayout(_a.IsOpen, _b.IsOpen);
+
+    /// <summary>
+    /// Разложить кадры при известной занятости треков. Флаги отдельным аргументом, потому
+    /// что до первой отрисовки треков ещё нет, а раскладку надо показать уже тогда
+    /// (задача #37): там вместо них — ожидаемые к открытию файлы.
+    /// </summary>
+    private void ApplyLayout(bool openA, bool openB)
     {
         // Выбранный трек могли закрыть — тогда раскладка показала бы пустоту.
         var layout = _layout switch
         {
-            LayoutMode.OnlyA when !_a.IsOpen && _b.IsOpen => LayoutMode.OnlyB,
-            LayoutMode.OnlyB when !_b.IsOpen && _a.IsOpen => LayoutMode.OnlyA,
+            LayoutMode.OnlyA when !openA && openB => LayoutMode.OnlyB,
+            LayoutMode.OnlyB when !openB && openA => LayoutMode.OnlyA,
             _ => _layout
         };
 
@@ -1362,25 +1428,32 @@ public partial class MainWindow : AppWindow
         if (changed) Status(AudioMessage());
     }
 
-    private void ShowVolume()
+    private void ShowVolume() => ShowVolume(_sync.Volume, _sync.Muted, _sync.HasAudio, _sync.IsOpen);
+
+    /// <summary>
+    /// Показать состояние звука. Значения аргументами, а не из движка: до первой
+    /// отрисовки его ещё нет, а кнопка звука в свёрнутом подвале уже видна, и выключенный
+    /// звук должен быть выключенным сразу (задача #37) — тогда их берут из настроек.
+    /// </summary>
+    private void ShowVolume(int volume, bool muted, bool hasAudio, bool isOpen)
     {
         // Ползунков два — в транспорте и в свёрнутом подвале; ведут они одну громкость,
         // поэтому расставляются вместе, а не по видимости.
         _syncingVolumeUi = true;
-        VolumeSlider.Value = VolumeSliderMini.Value = _sync.Volume;
+        VolumeSlider.Value = VolumeSliderMini.Value = volume;
         _syncingVolumeUi = false;
 
-        var silent = _sync.Muted || _sync.Volume == 0;
-        var audible = _sync.HasAudio && !silent;
+        var silent = muted || volume == 0;
+        var audible = hasAudio && !silent;
 
         BtnMute.Tag = BtnMuteMini.Tag = FindResource(silent ? "IcoMute" : "IcoVolume");
         Highlight(BtnMute, audible);
         Highlight(BtnMuteMini, audible);
 
-        TxtVolume.Text = TxtVolumeMini.Text = !_sync.IsOpen ? "—"
-            : !_sync.HasAudio ? "нет"
+        TxtVolume.Text = TxtVolumeMini.Text = !isOpen ? "—"
+            : !hasAudio ? "нет"
             : silent ? "выкл"
-            : $"{_sync.Volume} %";
+            : $"{volume} %";
     }
 
     /// <summary>Что происходит со звуком — тем же языком, что и остальная строка состояния.</summary>
@@ -1745,9 +1818,6 @@ public partial class MainWindow : AppWindow
         UpdatePosition();
     }
 
-    /// <summary>Открыт ровно один ролик.</summary>
-    private bool SingleTrack => _a.IsOpen ^ _b.IsOpen;
-
     /// <summary>
     /// Буква трека что-то различает, только когда открыты оба ролика: одному кадру на
     /// экране метка «A» ничего не сообщает, а место занимает (задача #32).
@@ -1759,18 +1829,27 @@ public partial class MainWindow : AppWindow
     /// буква в счётчике кадров (её убирает <see cref="ShowTrackLabels"/>), выбор раскладки
     /// и вкладки A / B боковой панели — выбирать в них не из чего.
     /// </summary>
-    private void UpdateTrackIndication()
+    private void UpdateTrackIndication() => ApplyTrackIndication(_a.IsOpen, _b.IsOpen);
+
+    /// <summary>
+    /// То же при известной занятости треков: до первой отрисовки их ещё нет, а пометки
+    /// уже должны стоять по месту — иначе таблетка раскладки и вкладки A / B мелькали бы
+    /// на одном открытом ролике (задача #37).
+    /// </summary>
+    private void ApplyTrackIndication(bool openA, bool openB)
     {
-        var letters = ShowTrackLetters ? Visibility.Visible : Visibility.Collapsed;
+        var both = openA && openB;
+
+        var letters = both ? Visibility.Visible : Visibility.Collapsed;
         PaneLetterA.Visibility = letters;
         PaneLetterB.Visibility = letters;
 
-        var pair = BothOpen() ? Visibility.Visible : Visibility.Collapsed;
+        var pair = both ? Visibility.Visible : Visibility.Collapsed;
         LayoutPill.Visibility = pair;
         SideTabs.Visibility = pair;
 
         // Панель показывала бы прочерки по закрытому треку — переводим её на открытый.
-        if (SingleTrack) _sideTrack = _a.IsOpen ? TrackId.A : TrackId.B;
+        if (openA ^ openB) _sideTrack = openA ? TrackId.A : TrackId.B;
     }
 
     /// <summary>Что открыто — в титульную полосу (задача #21).</summary>

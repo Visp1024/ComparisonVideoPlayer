@@ -115,10 +115,30 @@ public partial class MainWindow
     /// </summary>
     private void RestoreLastSession()
     {
-        if (!App.Settings.RestoreSession) return;
-        if (Session.Load(AppEnv.SessionFile) is not { HasFiles: true } session) return;
+        if (StartupSession() is not { } session) return;
 
         ApplySession(session, "прошлая сессия");
+    }
+
+    /// <summary>Прочитанная сессия и признак того, что читать её уже пробовали.</summary>
+    private Session? _startupSession;
+    private bool _startupSessionRead;
+
+    /// <summary>
+    /// Прошлая сессия, если её велено восстанавливать и в ней есть что восстанавливать.
+    /// Читается один раз: знать её содержимое надо ещё до первой отрисовки окна — по нему
+    /// видно, с каким видом кадра оно откроется (задача #37), — а второе чтение того же
+    /// файла ничего к этому не добавит.
+    /// </summary>
+    private Session? StartupSession()
+    {
+        if (_startupSessionRead) return _startupSession;
+
+        _startupSessionRead = true;
+        if (App.Settings.RestoreSession && Session.Load(AppEnv.SessionFile) is { HasFiles: true } session)
+            _startupSession = session;
+
+        return _startupSession;
     }
 
     /// <summary>Записать последнюю сессию при закрытии окна; пустую — стереть.</summary>

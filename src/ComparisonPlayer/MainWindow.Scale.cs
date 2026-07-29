@@ -23,6 +23,17 @@ public partial class MainWindow
         ApplyScale();
     }
 
+    /// <summary>
+    /// Взять режим из настроек и показать его кнопкой — всё, что можно сделать до
+    /// появления треков. Нужно первому кадру окна (задача #37): иначе иконка масштаба
+    /// сначала показывала бы «вписать», а потом менялась на настроенный режим.
+    /// </summary>
+    private void PrepareScale()
+    {
+        _scale = App.Settings.VideoScale;
+        ShowScaleMode();
+    }
+
     private void CycleScale() => SetScale(_scale switch
     {
         VideoScaleMode.Fit => VideoScaleMode.Fill,
@@ -53,8 +64,16 @@ public partial class MainWindow
         foreach (var track in _sync.Tracks)
             track.Flyleaf.ApplyScale(_scale);
 
-        // Иконка показывает текущий режим, а не следующий: кнопка переключается по кругу,
-        // и «что сейчас» — единственное, что о ней можно узнать не нажимая (задача #32).
+        ShowScaleMode();
+    }
+
+    /// <summary>
+    /// Показать режим кнопкой. Иконка показывает текущий режим, а не следующий: кнопка
+    /// переключается по кругу, и «что сейчас» — единственное, что о ней можно узнать
+    /// не нажимая (задача #32).
+    /// </summary>
+    private void ShowScaleMode()
+    {
         BtnScale.Tag = FsScale.Tag = FindResource(_scale switch
         {
             VideoScaleMode.Fill => "IcoScaleFill",

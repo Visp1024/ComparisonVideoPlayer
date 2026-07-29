@@ -535,8 +535,10 @@
 
         <!-- Таймлайн: панель управления и сам контрол (линейка, дорожки, playhead).
              В компактном виде (задача #18) вся эта область скрыта, вместо неё —
-             подвал строкой ниже. -->
-        <Grid x:Name="TimelineArea" Grid.Row="3">
+             подвал строкой ниже. Скрыта и в разметке: приложение всегда запускается
+             компактным, и видимый в первом кадре таймлайн тут же схлопывался бы
+             (задача #37). -->
+        <Grid x:Name="TimelineArea" Grid.Row="3" Visibility="Collapsed">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -627,7 +629,7 @@
         <!-- Компактный подвал (задача #18): полоса прогресса во всю ширину, под ней
              полоска инициализации кэша и ужатый транспорт. Заменяет собой и таймлайн,
              и полноразмерный транспорт, и строку сообщений. -->
-        <Border x:Name="CompactFooter" Grid.Row="4" Visibility="Collapsed"
+        <Border x:Name="CompactFooter" Grid.Row="4"
                 BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="12,8,12,6">
             <StackPanel>
                 <tl:CompactBar x:Name="MiniBar" />
@@ -695,7 +697,7 @@
              перестало помещаться в окно наименьшей ширины, а обрезанный ползунок хуже
              перенесённого на вторую строку. -->
         <WrapPanel x:Name="TransportRow" Grid.Row="5" Orientation="Horizontal" Margin="14,10,14,12"
-                   VerticalAlignment="Center">
+                   VerticalAlignment="Center" Visibility="Collapsed">
             <Button x:Name="BtnShuttleBack" Style="{StaticResource GlyphButton}"
                     Tag="{StaticResource IcoShuttleBack}"
                     Click="ShuttleBack_Click" ToolTip="Шаттл назад: повторное нажатие вдвое быстрее (J)" />
@@ -830,7 +832,8 @@
 
         <!-- Строка сообщений: в компактном виде скрыта вместе с таймлайном -->
         <Border x:Name="StatusBar" Grid.Row="6" Background="{StaticResource Panel2Brush}"
-                BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="14,7">
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="14,7"
+                Visibility="Collapsed">
             <TextBlock x:Name="TxtStatus" FontFamily="{StaticResource MonoFont}" FontSize="12"
                        Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />
         </Border>
