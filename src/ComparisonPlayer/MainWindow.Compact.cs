@@ -25,6 +25,7 @@ public partial class MainWindow
         {
             StopShuttle();
             _scrubbing = true;
+            _scrubWasPlaying = _sync.IsPlaying;
         };
         MiniBar.ScrubMoved += (_, frame) => TimelineScrub(frame);
         MiniBar.ScrubEnded += (_, frame) => TimelineScrubEnd(frame);

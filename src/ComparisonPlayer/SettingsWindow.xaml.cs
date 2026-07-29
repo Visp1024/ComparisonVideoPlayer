@@ -84,6 +84,7 @@ public partial class SettingsWindow : AppWindow
         ChkSnap.IsChecked = s.SnapToFrames;
         ChkLoop.IsChecked = s.LoopSegment;
         ChkAutoPlay.IsChecked = s.AutoPlayOnOpen;
+        ChkPauseOnSeek.IsChecked = s.PauseOnSeek;
         ChkWheelInverted.IsChecked = s.WheelInverted;
 
         (s.StartupLayout switch
@@ -119,6 +120,7 @@ public partial class SettingsWindow : AppWindow
         s.SnapToFrames = ChkSnap.IsChecked == true;
         s.LoopSegment = ChkLoop.IsChecked == true;
         s.AutoPlayOnOpen = ChkAutoPlay.IsChecked == true;
+        s.PauseOnSeek = ChkPauseOnSeek.IsChecked == true;
         s.WheelInverted = ChkWheelInverted.IsChecked == true;
 
         s.StartupLayout = RbStartSide.IsChecked == true ? StartupLayoutMode.Side

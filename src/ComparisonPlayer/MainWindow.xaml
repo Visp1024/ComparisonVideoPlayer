@@ -74,6 +74,12 @@
                 <Button x:Name="BtnLayout" Style="{StaticResource ToolButton}" Content="Рядом" Click="Layout_Click"
                         ToolTip="Что показывать: рядом / только A / только B (V)" />
 
+                <!-- Пауза при переходе по таймлайну (задача #29): настройка живёт и в окне
+                     настроек, но её меняют по ходу просмотра, поэтому флажок стоит здесь -->
+                <CheckBox x:Name="ChkPauseOnSeek" VerticalAlignment="Center" Margin="16,0,0,0"
+                          Content="Пауза при переходе" Click="PauseOnSeek_Click"
+                          ToolTip="Ставить на паузу при переходе по таймлайну: щелчок по шкале, перетаскивание playhead, Home/End. Выключено — воспроизведение продолжается с нового места." />
+
                 <Button x:Name="BtnSettings" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
                         Content="Настройки" Margin="8,0,0,0" Click="Settings_Click"
                         ToolTip="Настройки и шпаргалка по клавишам (F1)" />

@@ -67,6 +67,12 @@ public partial class MainWindow : AppWindow
     /// <summary>Идёт декодирование кадра при перетаскивании: следующие движения мыши пропускаем.</summary>
     private bool _seeking;
 
+    /// <summary>
+    /// Играл ли плеер, когда взялись за playhead. К концу перетаскивания об этом уже
+    /// не спросить: живое листание кадров само ставит паузу на каждом движении мыши.
+    /// </summary>
+    private bool _scrubWasPlaying;
+
     /// <summary>Повторять отрезок при воспроизведении (клавиша L). Состояние переживает перезапуск.</summary>
     private bool _loop;
 
@@ -256,7 +262,21 @@ public partial class MainWindow : AppWindow
     private void ToStart_Click(object sender, RoutedEventArgs e)
     {
         StopShuttle();
-        SeekFrame(_sync.SegmentInFrame);
+        JumpToFrame(_sync.SegmentInFrame);
+    }
+
+    /// <summary>
+    /// Флажок панели инструментов: настройку меняют по ходу просмотра, поэтому она
+    /// сохраняется сразу, без «применить». Тот же флажок есть в окне настроек.
+    /// </summary>
+    private void PauseOnSeek_Click(object sender, RoutedEventArgs e)
+    {
+        App.Settings.PauseOnSeek = ChkPauseOnSeek.IsChecked == true;
+        App.Settings.Save();
+
+        Status(App.Settings.PauseOnSeek
+            ? "переход по таймлайну ставит на паузу"
+            : "переход по таймлайну не прерывает воспроизведение");
     }
 
     /// <summary>Меню сессии открываем нажатием: отдельная кнопка на каждый пункт заняла бы всю панель.</summary>
@@ -344,8 +364,8 @@ public partial class MainWindow : AppWindow
             case Key.Left: StepBy(-step); return true;
 
             // Home/End работают по отрезку — он и есть рабочая область; края шкалы под Shift.
-            case Key.Home: StopShuttle(); SeekFrame(shift ? 0 : _sync.SegmentInFrame); return true;
-            case Key.End: StopShuttle(); SeekFrame(shift ? _sync.LastFrame : _sync.SegmentOutFrame); return true;
+            case Key.Home: StopShuttle(); JumpToFrame(shift ? 0 : _sync.SegmentInFrame); return true;
+            case Key.End: StopShuttle(); JumpToFrame(shift ? _sync.LastFrame : _sync.SegmentOutFrame); return true;
 
             case Key.Tab: SwitchActiveTrack(); return true;
             case Key.V: CycleLayout(); return true;
@@ -694,11 +714,13 @@ public partial class MainWindow : AppWindow
     {
         _loop = App.Settings.LoopSegment;
         Timeline.SnapEnabled = App.Settings.SnapToFrames;
+        ChkPauseOnSeek.IsChecked = App.Settings.PauseOnSeek;
 
         Timeline.ScrubStarted += (_, _) =>
         {
             StopShuttle();
             _scrubbing = true;
+            _scrubWasPlaying = _sync.IsPlaying;
         };
         Timeline.ScrubMoved += (_, frame) => TimelineScrub(frame);
         Timeline.ScrubEnded += (_, frame) => TimelineScrubEnd(frame);
@@ -763,10 +785,15 @@ public partial class MainWindow : AppWindow
     private void TimelineScrubEnd(long frame)
     {
         _scrubbing = false;
+
+        var wasPlaying = _scrubWasPlaying;
+        _scrubWasPlaying = false;
+
         if (!_sync.IsOpen) return;
 
         ShowPlayhead(frame);
         SeekFrame(frame);
+        ResumeAfterJump(wasPlaying);
     }
 
     /// <summary>Границу отрезка тащат мышью: контрол работает в кадрах шкалы, трек — в своих.</summary>
@@ -1170,6 +1197,7 @@ public partial class MainWindow : AppWindow
         _showOsd = changed.ShowOverlay;
         _loop = changed.LoopSegment;
         Timeline.SnapEnabled = changed.SnapToFrames;
+        ChkPauseOnSeek.IsChecked = changed.PauseOnSeek;
 
         RbAutoHint.Text = $"строить, если шаг назад медленнее {changed.StepBackThresholdMs} мс";
 
@@ -1324,6 +1352,31 @@ public partial class MainWindow : AppWindow
 
     /// <summary>Единственный переход на кадр шкалы из интерфейса: движок разведёт его по трекам.</summary>
     private void SeekFrame(long frame) => _sync.SeekToFrame(frame, SeekTrackFrame);
+
+    /// <summary>
+    /// Переход по команде пользователя: щелчок по шкале, Home/End, «в начало отрезка».
+    /// От <see cref="SeekFrame"/> отличается тем, что уважает настройку «пауза при
+    /// переходе»; сам <see cref="SeekFrame"/> вызывают и петля, и шаттл, и сборка кэша —
+    /// им воспроизведение восстанавливать не нужно, они ведут его сами.
+    /// </summary>
+    private void JumpToFrame(long frame)
+    {
+        var wasPlaying = _sync.IsPlaying;
+        SeekFrame(frame);
+        ResumeAfterJump(wasPlaying);
+    }
+
+    /// <summary>
+    /// Продолжить воспроизведение после перехода, если настройка «пауза при переходе»
+    /// выключена. Seek движка всегда останавливает плеер (см. FlyleafBackend.SeekToFrame),
+    /// поэтому «не ставить на паузу» — это пустить его заново с нового кадра.
+    /// </summary>
+    private void ResumeAfterJump(bool wasPlaying)
+    {
+        if (!wasPlaying || App.Settings.PauseOnSeek || !_sync.IsOpen) return;
+
+        _sync.Play(SeekTrackFrame);
+    }
 
     /// <summary>
     /// Переход одного трека на его кадр. Кроме собственно seek следит за границей
