@@ -195,6 +195,10 @@ public partial class MainWindow
         if (_fsBarShown) return;
 
         _fsBarShown = true;
+
+        // Открываем полосу без сдвига: своё место на экране Popup считает в момент
+        // открытия — см. <see cref="ResetFsSlide"/>.
+        ResetFsSlide();
         FsPopup.IsOpen = true;
         PlaceFsBar();
 
@@ -213,8 +217,7 @@ public partial class MainWindow
 
         if (!animate)
         {
-            FsSlide.BeginAnimation(TranslateTransform.YProperty, null);
-            FsSlide.Y = 0;
+            ResetFsSlide();
             FsPopup.IsOpen = false;
             return;
         }
@@ -224,8 +227,24 @@ public partial class MainWindow
         ShowFsCursor(false);
         Slide(from: 0, to: FsBarHeight, onDone: () =>
         {
-            if (!_fsBarShown) FsPopup.IsOpen = false;
+            if (_fsBarShown) return;                     // успели показать заново — полоса на месте
+
+            FsPopup.IsOpen = false;
+            ResetFsSlide();
         });
+    }
+
+    /// <summary>
+    /// Снять сдвиг полосы, пока её никто не видит. Popup — отдельное окно, и своё место
+    /// на экране оно считает в момент открытия, с учётом сдвига содержимого. Уехавшая
+    /// полоса оставляет сдвиг ровно на свою высоту, и открытое с ним окно не умещается
+    /// на экране снизу — Windows подтягивает его вверх, а вернувшаяся полоса повисает
+    /// над нижним краем (задача #36).
+    /// </summary>
+    private void ResetFsSlide()
+    {
+        FsSlide.BeginAnimation(TranslateTransform.YProperty, null);
+        FsSlide.Y = 0;
     }
 
     private void Slide(double from, double to, Action? onDone)
