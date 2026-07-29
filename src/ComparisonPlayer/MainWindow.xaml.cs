@@ -148,6 +148,8 @@ public partial class MainWindow : AppWindow
         InitTimeline();
         InitCompact();
         InitAudio();
+        InitScale();
+        InitFullScreen();
         ApplyLayout();
 
         // Накладка — отдельное окно, перетаскивание из главного окна там не ловится.
@@ -220,6 +222,10 @@ public partial class MainWindow : AppWindow
     private void OnClosed(object? sender, EventArgs e)
     {
         StopShuttle();
+
+        // Курсор мог остаться спрятанным полноэкранным режимом — счётчик системный,
+        // и вернуть его обязаны мы.
+        ShowFsCursor(true);
         SaveLastSession();
 
         App.Settings.ShowOverlay = _showOsd;
@@ -370,6 +376,12 @@ public partial class MainWindow : AppWindow
             case Key.Tab: SwitchActiveTrack(); return true;
             case Key.V: CycleLayout(); return true;
 
+            // Кадр во весь экран (задача #28); Esc — только выход, в обычном виде
+            // он ничего не делает и должен доставаться диалогам.
+            case Key.F11: ToggleFullScreen(); return true;
+            case Key.Escape when _fullscreen: LeaveFullScreen(); return true;
+            case Key.Z: CycleScale(); return true;
+
             // M назначает мастера, и звук идёт за ним; выключается звук соседним Ctrl+M.
             case Key.M when ctrl: ToggleMute(); return true;
             case Key.M: MakeActiveMaster(); return true;
@@ -489,7 +501,7 @@ public partial class MainWindow : AppWindow
     {
         _side = _side == mode ? SideMode.None : mode;
 
-        SidePanel.Visibility = _side == SideMode.None ? Visibility.Collapsed : Visibility.Visible;
+        ApplySideVisibility();
         InfoSection.Visibility = _side == SideMode.Info ? Visibility.Visible : Visibility.Collapsed;
         CacheSection.Visibility = _side == SideMode.Cache ? Visibility.Visible : Visibility.Collapsed;
         SideTitle.Text = _side == SideMode.Cache ? "К Э Ш   К А Д Р О В" : "С В Е Д Е Н И Я";
@@ -505,6 +517,16 @@ public partial class MainWindow : AppWindow
             _ => "панель свёрнута"
         });
     }
+
+    /// <summary>
+    /// Боковая панель видна, когда открыта и когда для неё есть место: в полноэкранном
+    /// виде (задача #28) кадр занимает экран целиком, а выбор панели переживает выход
+    /// из него — возвращаться в свёрнутую панель после Esc человек не просил.
+    /// </summary>
+    private void ApplySideVisibility() =>
+        SidePanel.Visibility = _side != SideMode.None && !_fullscreen
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     private void SideTab_Checked(object sender, RoutedEventArgs e)
     {
@@ -1410,13 +1432,20 @@ public partial class MainWindow : AppWindow
         BtnShuttleBackMini.IsEnabled = BtnShuttleFwdMini.IsEnabled = open;
         BtnPlayMini.Content = BtnPlay.Content;
 
+        BtnPrevFs.IsEnabled = BtnNextFs.IsEnabled = BtnPlayFs.IsEnabled = open;
+        BtnShuttleBackFs.IsEnabled = BtnShuttleFwdFs.IsEnabled = open;
+        BtnPlayFs.Content = BtnPlay.Content;
+
         EmptyA.Visibility = _a.IsOpen ? Visibility.Collapsed : Visibility.Visible;
         EmptyB.Visibility = _b.IsOpen ? Visibility.Collapsed : Visibility.Visible;
 
-        PaneA.BorderThickness = new Thickness(_active == TrackId.A ? 2 : 0, 0, 0, 0);
+        // Полоска активного трека — часть интерфейса, и в полноэкранном виде (задача #28)
+        // её нет вместе со всем остальным: у края экрана она читается как дефект картинки.
+        // Между двумя кадрами остаётся тонкий разделитель — иначе они сливаются в один.
+        PaneA.BorderThickness = new Thickness(_active == TrackId.A && !_fullscreen ? 2 : 0, 0, 0, 0);
         PaneA.BorderBrush = (Brush)FindResource("AccentBrush");
-        PaneB.BorderThickness = new Thickness(_active == TrackId.B ? 2 : 1, 0, 0, 0);
-        PaneB.BorderBrush = (Brush)FindResource(_active == TrackId.B ? "TrackBBrush" : "LineBrush");
+        PaneB.BorderThickness = new Thickness(_active == TrackId.B && !_fullscreen ? 2 : 1, 0, 0, 0);
+        PaneB.BorderBrush = (Brush)FindResource(_active == TrackId.B && !_fullscreen ? "TrackBBrush" : "LineBrush");
 
         PaneNameA.Text = _a.IsOpen ? _a.Media!.FileName : "";
         PaneNameB.Text = _b.IsOpen ? _b.Media!.FileName : "";
@@ -1498,9 +1527,9 @@ public partial class MainWindow : AppWindow
 
     private void UpdatePosition()
     {
-        TxtTime.Text = TxtTimeMini.Text = Timecode(_sync.PositionTime);
+        TxtTime.Text = TxtTimeMini.Text = TxtTimeFs.Text = Timecode(_sync.PositionTime);
         TxtDuration.Text = _sync.IsOpen ? "/ " + Timecode(_sync.Duration) : "/ --:--:--.---";
-        TxtDurationMini.Text = TxtDuration.Text;
+        TxtDurationMini.Text = TxtDurationFs.Text = TxtDuration.Text;
 
         ShowFrameLabels();
 
@@ -1515,17 +1544,20 @@ public partial class MainWindow : AppWindow
     /// </summary>
     private void ShowFrameLabels()
     {
-        ShowTrackLabels(_a, TxtFrameA, FrameBadgeA, PaneOsdA, PaneMasterA, NoFrameA, NoFrameHintA, TxtFrameAMini);
-        ShowTrackLabels(_b, TxtFrameB, FrameBadgeB, PaneOsdB, PaneMasterB, NoFrameB, NoFrameHintB, TxtFrameBMini);
+        ShowTrackLabels(_a, TxtFrameA, FrameBadgeA, PaneOsdA, PaneMasterA, NoFrameA, NoFrameHintA,
+            TxtFrameAMini, TxtFrameAFs);
+        ShowTrackLabels(_b, TxtFrameB, FrameBadgeB, PaneOsdB, PaneMasterB, NoFrameB, NoFrameHintB,
+            TxtFrameBMini, TxtFrameBFs);
     }
 
     private void ShowTrackLabels(PlayerTrack track, TextBlock badgeText, UIElement badge,
-        TextBlock osd, TextBlock role, UIElement noFrame, TextBlock noFrameHint, TextBlock miniText)
+        TextBlock osd, TextBlock role, UIElement noFrame, TextBlock noFrameHint,
+        TextBlock miniText, TextBlock fsText)
     {
         if (!track.IsOpen)
         {
             badgeText.Text = "";
-            miniText.Text = "";
+            miniText.Text = fsText.Text = "";
             osd.Text = "";
             role.Text = "";
             noFrame.Visibility = Visibility.Collapsed;
@@ -1540,8 +1572,11 @@ public partial class MainWindow : AppWindow
             : $"{track.Letter} —";
         badge.Opacity = frame is null ? 0.45 : 1;
 
-        // В компактном подвале места меньше: номер кадра без общего числа.
-        miniText.Text = frame is { } mini ? $"{track.Letter} {approx}{mini}" : $"{track.Letter} —";
+        // В компактном подвале и в полноэкранной полосе места меньше: номер кадра
+        // без общего числа.
+        miniText.Text = fsText.Text = frame is { } mini
+            ? $"{track.Letter} {approx}{mini}"
+            : $"{track.Letter} —";
 
         osd.Text = _showOsd && frame is { } shown
             ? $"кадр {approx}{shown} · {Timecode(track.TimeOf(shown))}"

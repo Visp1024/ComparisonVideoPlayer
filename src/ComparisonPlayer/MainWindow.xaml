@@ -12,7 +12,7 @@
         AllowDrop="True"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
 
-    <Grid>
+    <Grid x:Name="Root">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -29,7 +29,8 @@
         <chrome:TitleBar x:Name="Bar" Grid.Row="0" Caption="CVP" />
 
         <!-- Панель инструментов -->
-        <Border Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,0,0,1" Padding="12,8">
+        <Border x:Name="Toolbar" Grid.Row="1" BorderBrush="{StaticResource LineBrush}"
+                BorderThickness="0,0,0,1" Padding="12,8">
             <DockPanel LastChildFill="False">
                 <Button x:Name="BtnOpenA" Style="{StaticResource PrimaryButton}" Click="OpenA_Click"
                         ToolTip="Открыть файл в трек A (Ctrl+O)">
@@ -74,11 +75,19 @@
                 <Button x:Name="BtnLayout" Style="{StaticResource ToolButton}" Content="Рядом" Click="Layout_Click"
                         ToolTip="Что показывать: рядом / только A / только B (V)" />
 
+                <!-- Как кадр вписан в область (задача #28): вписать / заполнить / растянуть -->
+                <Button x:Name="BtnScale" Style="{StaticResource ToolButton}" Content="Вписать" Click="Scale_Click"
+                        ToolTip="Кадр в области: вписать / заполнить / растянуть (Z)" />
+
                 <!-- Пауза при переходе по таймлайну (задача #29): настройка живёт и в окне
                      настроек, но её меняют по ходу просмотра, поэтому флажок стоит здесь -->
                 <CheckBox x:Name="ChkPauseOnSeek" VerticalAlignment="Center" Margin="16,0,0,0"
                           Content="Пауза при переходе" Click="PauseOnSeek_Click"
                           ToolTip="Ставить на паузу при переходе по таймлайну: щелчок по шкале, перетаскивание playhead, Home/End. Выключено — воспроизведение продолжается с нового места." />
+
+                <Button x:Name="BtnFullScreen" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
+                        Content="⛶" Margin="8,0,0,0" Padding="10,1" Click="FullScreen_Click"
+                        ToolTip="Во весь экран: остаётся только кадр (F11)" />
 
                 <Button x:Name="BtnSettings" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
                         Content="Настройки" Margin="8,0,0,0" Click="Settings_Click"
@@ -182,8 +191,10 @@
                                 </StackPanel>
                             </Grid>
 
-                            <!-- Метка трека: видна всегда, иначе не понять, где какой файл -->
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
+                            <!-- Метка трека: видна всегда, иначе не понять, где какой файл.
+                                 Исключение — полноэкранный режим (задача #28): там на экране
+                                 остаётся только кадр. -->
+                            <Border x:Name="PaneLabelA" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
                                     Panel.ZIndex="2" CornerRadius="4" Padding="9,4" Background="#A8050709">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="A" FontFamily="{StaticResource MonoFont}" FontWeight="Bold"
@@ -236,7 +247,7 @@
                                 </StackPanel>
                             </Grid>
 
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
+                            <Border x:Name="PaneLabelB" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,12,0,0"
                                     Panel.ZIndex="2" CornerRadius="4" Padding="9,4" Background="#A8050709">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="B" FontFamily="{StaticResource MonoFont}" FontWeight="Bold"
@@ -628,6 +639,67 @@
                        FontFamily="{StaticResource MonoFont}" FontSize="12.5"
                        Foreground="{StaticResource MutedBrush}" />
         </WrapPanel>
+
+        <!-- Полоса полноэкранного режима (задача #28).
+             Отдельное окно (Popup), а не элемент этой сетки: кадр выводит FlyleafHost
+             в собственные окна поверх WPF, и обычная накладка главного окна оказалась
+             бы под ним. Выезжает снизу на движение мыши и уезжает по бездействию —
+             в полноэкранном виде это единственный доступный транспорт. -->
+        <Popup x:Name="FsPopup" Placement="Relative" PlacementTarget="{Binding ElementName=Root}"
+               AllowsTransparency="True" Focusable="False" StaysOpen="True" IsOpen="False">
+            <Border x:Name="FsBar" Background="#E60F1119" BorderBrush="{StaticResource LineBrush}"
+                    BorderThickness="0,1,0,0" Padding="16,8,16,10">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="FsSlide" />
+                </Border.RenderTransform>
+                <StackPanel>
+                    <tl:CompactBar x:Name="FsProgress" />
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtTimeFs" FontFamily="{StaticResource MonoFont}" FontSize="14"
+                                       VerticalAlignment="Center" />
+                            <TextBlock x:Name="TxtDurationFs" Margin="6,0,0,0" VerticalAlignment="Center"
+                                       FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                       Foreground="{StaticResource DimBrush}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button x:Name="BtnShuttleBackFs" Style="{StaticResource MiniTransportButton}" Content="◀◀"
+                                    Click="ShuttleBack_Click" ToolTip="Шаттл назад (J)" />
+                            <Button x:Name="BtnPrevFs" Style="{StaticResource MiniTransportButton}" Content="◀|"
+                                    Click="StepPrev_Click" ToolTip="Шаг на кадр назад (←)" />
+                            <Button x:Name="BtnPlayFs" Style="{StaticResource MiniPlayButton}" Content="▶"
+                                    Click="PlayPause_Click" ToolTip="Воспроизведение / пауза (Space)" />
+                            <Button x:Name="BtnNextFs" Style="{StaticResource MiniTransportButton}" Content="|▶"
+                                    Click="StepNext_Click" ToolTip="Шаг на кадр вперёд (→)" />
+                            <Button x:Name="BtnShuttleFwdFs" Style="{StaticResource MiniTransportButton}" Content="▶▶"
+                                    Click="ShuttleForward_Click" ToolTip="Шаттл вперёд (L)" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtFrameAFs" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                       VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" />
+                            <TextBlock x:Name="TxtFrameBFs" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}"
+                                       FontSize="11.5" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TrackBBrush}" />
+                            <Button x:Name="FsScale" Style="{StaticResource TimelineButton}" Content="Вписать"
+                                    Margin="12,0,0,0" Click="Scale_Click"
+                                    ToolTip="Кадр в области: вписать / заполнить / растянуть (Z)" />
+                            <Button x:Name="BtnExitFs" Style="{StaticResource TimelineButton}" Content="⤢"
+                                    Margin="6,0,0,0" Padding="9,1" Click="FullScreen_Click"
+                                    ToolTip="Выйти из полноэкранного режима (F11, Esc)" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Popup>
 
         <!-- Строка сообщений: в компактном виде скрыта вместе с таймлайном -->
         <Border x:Name="StatusBar" Grid.Row="6" Background="{StaticResource Panel2Brush}"

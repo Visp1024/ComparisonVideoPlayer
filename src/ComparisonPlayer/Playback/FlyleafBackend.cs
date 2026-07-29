@@ -93,6 +93,50 @@ public sealed class FlyleafBackend : IPlaybackBackend
         return cfg;
     }
 
+    /// <summary>
+    /// Как кадр вписан в отведённую ему область (задача #28). Настройка чисто
+    /// отрисовочная: ни позиция, ни номер кадра от неё не зависят, поэтому живёт
+    /// здесь, а не в <see cref="IPlaybackBackend"/> — кадры из кэша рисует этот же
+    /// Player, и режим переживает переключение движков сам собой.
+    /// </summary>
+    public void ApplyScale(VideoScaleMode mode)
+    {
+        var video = _player.Config.Video;
+
+        // Растянуть — это и есть «соотношение сторон как у области вывода».
+        if (mode == VideoScaleMode.Stretch)
+        {
+            video.AspectRatio = AspectRatio.Fill;
+            video.Zoom = FitZoom;
+            return;
+        }
+
+        video.AspectRatio = AspectRatio.Keep;
+        video.Zoom = mode == VideoScaleMode.Fill ? FitZoom * FillFactor() : FitZoom;
+    }
+
+    /// <summary>Zoom у FlyleafLib в процентах: 100 — кадр вписан в область как есть.</summary>
+    private const double FitZoom = 100;
+
+    /// <summary>
+    /// Во сколько раз увеличить вписанный кадр, чтобы он заполнил область целиком.
+    /// Вписанный упирается в одну пару сторон; заполнение — упереться и во вторую,
+    /// лишнее уходит за края (Zoom считается от центра, ZoomCenter по умолчанию 0.5).
+    /// </summary>
+    private double FillFactor()
+    {
+        var renderer = _player.Renderer;
+        if (renderer is null || renderer.ControlWidth <= 0 || renderer.ControlHeight <= 0) return 1;
+
+        // DAR учитывает неквадратный пиксель — брать Width/Height файла было бы неверно
+        // для анаморфного материала; на закрытом файле его ещё нет, там режим не важен.
+        var frame = renderer.DAR.Value;
+        if (frame <= 0) return 1;
+
+        var area = renderer.ControlWidth / (double)renderer.ControlHeight;
+        return Math.Max(area / frame, frame / area);
+    }
+
     public OpenResult Open(string path)
     {
         if (!File.Exists(path))

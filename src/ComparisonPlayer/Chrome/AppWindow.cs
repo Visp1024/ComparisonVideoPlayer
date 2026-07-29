@@ -24,16 +24,7 @@ public class AppWindow : Window
 
     public AppWindow()
     {
-        WindowChrome.SetWindowChrome(this, new WindowChrome
-        {
-            CaptionHeight = TitleBarHeight,
-            ResizeBorderThickness = new Thickness(6),
-            CornerRadius = new CornerRadius(0),
-            // Рамку и тень рисует DWM: с ненулевым GlassFrameThickness поверх нашей полосы
-            // проступает светлая линия системного фрейма.
-            GlassFrameThickness = new Thickness(0),
-            UseAeroCaptionButtons = false
-        });
+        WindowChrome.SetWindowChrome(this, CreateChrome());
 
         CommandBindings.Add(new CommandBinding(SystemCommands.MinimizeWindowCommand,
             (_, _) => SystemCommands.MinimizeWindow(this)));
@@ -45,9 +36,71 @@ public class AppWindow : Window
             (_, _) => Close()));
     }
 
+    private static WindowChrome CreateChrome() => new()
+    {
+        CaptionHeight = TitleBarHeight,
+        ResizeBorderThickness = new Thickness(6),
+        CornerRadius = new CornerRadius(0),
+        // Рамку и тень рисует DWM: с ненулевым GlassFrameThickness поверх нашей полосы
+        // проступает светлая линия системного фрейма.
+        GlassFrameThickness = new Thickness(0),
+        UseAeroCaptionButtons = false
+    };
+
     protected override void OnStateChanged(EventArgs e)
     {
         base.OnStateChanged(e);
+        FitMaximizedToWorkArea();
+    }
+
+    // ---------- полноэкранный режим (задача #28) ----------
+
+    /// <summary>Окно занимает весь монитор, без своей полосы и без панели задач.</summary>
+    public bool IsFullScreen { get; private set; }
+
+    private WindowState _stateBeforeFullScreen;
+    private ResizeMode _resizeBeforeFullScreen;
+
+    /// <summary>
+    /// Развернуть на весь монитор. Своя титульная полоса и <see cref="WindowChrome"/>
+    /// на это время снимаются целиком: chrome оставляет наверху область заголовка и
+    /// рамку изменения размера — в полноэкранном виде это отъеденные у кадра пиксели
+    /// и перетаскивание окна там, где ждут двойного клика по картинке.
+    /// </summary>
+    public void EnterFullScreen()
+    {
+        if (IsFullScreen) return;
+
+        IsFullScreen = true;
+        _stateBeforeFullScreen = WindowState;
+        _resizeBeforeFullScreen = ResizeMode;
+
+        WindowChrome.SetWindowChrome(this, null);
+        BorderThickness = new Thickness(0);
+        WindowStyle = WindowStyle.None;
+        ResizeMode = ResizeMode.NoResize;
+
+        // Развёрнутое окно новый стиль не подхватывает: Windows считает его границы
+        // уже посчитанными, и полноэкранное окно остаётся в пределах рабочей области.
+        if (WindowState == WindowState.Maximized) WindowState = WindowState.Normal;
+        WindowState = WindowState.Maximized;
+    }
+
+    public void ExitFullScreen()
+    {
+        if (!IsFullScreen) return;
+
+        IsFullScreen = false;
+
+        WindowChrome.SetWindowChrome(this, CreateChrome());
+        WindowStyle = WindowStyle.SingleBorderWindow;
+        ResizeMode = _resizeBeforeFullScreen;
+
+        // Тем же путём назад: из Maximized в Maximized окно не пересчитало бы рамку
+        // и осталось бы на весь монитор уже с полосой.
+        WindowState = WindowState.Normal;
+        WindowState = _stateBeforeFullScreen;
+
         FitMaximizedToWorkArea();
     }
 
@@ -59,6 +112,14 @@ public class AppWindow : Window
     /// </summary>
     private void FitMaximizedToWorkArea()
     {
+        // В полноэкранном виде поля не нужны вовсе: там нет ни chrome с его рамкой,
+        // ни рабочей области — окно занимает монитор целиком.
+        if (IsFullScreen)
+        {
+            BorderThickness = new Thickness(0);
+            return;
+        }
+
         if (WindowState != WindowState.Maximized)
         {
             BorderThickness = new Thickness(0);

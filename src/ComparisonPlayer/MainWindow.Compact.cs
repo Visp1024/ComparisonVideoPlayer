@@ -54,12 +54,14 @@ public partial class MainWindow
 
     private void ApplyCompact()
     {
-        var full = _compact ? Visibility.Collapsed : Visibility.Visible;
+        // В полноэкранном виде (задача #28) не видно ни того, ни другого: там
+        // остаётся только кадр, а транспорт выезжает полосой поверх него.
+        var full = !_compact && !_fullscreen ? Visibility.Visible : Visibility.Collapsed;
 
         TimelineArea.Visibility = full;
         TransportRow.Visibility = full;
         StatusBar.Visibility = full;
-        CompactFooter.Visibility = _compact ? Visibility.Visible : Visibility.Collapsed;
+        CompactFooter.Visibility = _compact && !_fullscreen ? Visibility.Visible : Visibility.Collapsed;
 
         BtnExpand.Content = "▴";
         BtnCollapse.Content = "▾";
@@ -67,7 +69,7 @@ public partial class MainWindow
         // Развернувшийся таймлайн получает ширину только сейчас — до этого он был
         // скрыт, и масштаб «вся шкала в ширину окна» посчитать было не по чему.
         // Здесь же лениво снимаются превью: в свёрнутом виде их некуда показывать.
-        if (!_compact)
+        if (!_compact && !_fullscreen)
         {
             Timeline.FitAll();
             RefreshThumbnails();
@@ -77,11 +79,12 @@ public partial class MainWindow
         UpdatePosition();
     }
 
-    /// <summary>Показать положение playhead в обоих видах: активен всегда ровно один.</summary>
+    /// <summary>Показать положение playhead во всех трёх видах: активен всегда ровно один.</summary>
     private void ShowPlayhead(long frame)
     {
         Timeline.SetPosition(frame);
         MiniBar.SetPosition(frame);
+        FsProgress.SetPosition(frame);
     }
 
     /// <summary>Собрать для полосы то же состояние, что таймлайн рисует дорожками.</summary>
@@ -97,7 +100,11 @@ public partial class MainWindow
             marks.Add(_sync.ToTimeline(_b, _b.FrameCount));
         }
 
+        // Полоса свёрнутого подвала и полоса полноэкранного режима показывают одно
+        // и то же и разом видны никогда не бывают — состояние у них общее.
         MiniBar.SetContent(_sync.TimelineFrames, _sync.SegmentInFrame, _sync.SegmentOutFrame,
+            marks, BuildFraction());
+        FsProgress.SetContent(_sync.TimelineFrames, _sync.SegmentInFrame, _sync.SegmentOutFrame,
             marks, BuildFraction());
     }
 
