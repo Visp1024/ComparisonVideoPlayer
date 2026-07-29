@@ -9,6 +9,7 @@ using ComparisonPlayer.Chrome;
 using ComparisonPlayer.Playback;
 using ComparisonPlayer.Timeline;
 using ComparisonPlayer.Tracks;
+using FlyleafLib.Controls.WPF;
 using Microsoft.Win32;
 
 namespace ComparisonPlayer;
@@ -48,9 +49,11 @@ public partial class MainWindow : AppWindow
     /// </summary>
     private static string[] VideoExtensions => FileAssociations.VideoExtensions;
 
-    private readonly PlayerTrack _a;
-    private readonly PlayerTrack _b;
-    private readonly SyncEngine _sync;
+    // Плееры и транспорт создаются не в конструкторе, а сразу после первого показа
+    // окна (задача #31): до этого момента окно уже нарисовано, но ещё пустое.
+    private PlayerTrack _a = null!;
+    private PlayerTrack _b = null!;
+    private SyncEngine _sync = null!;
 
     /// <summary>Активный трек: ему адресованы открытие файла, отрезок и назначение мастера.</summary>
     private TrackId _active = TrackId.A;
@@ -91,10 +94,47 @@ public partial class MainWindow : AppWindow
         InitializeComponent();
         StartupTrace.Mark("xaml");
 
+        Closed += OnClosed;
+        ContentRendered += OnFirstFrame;
+    }
+
+    /// <summary>
+    /// Первый показ окна. Всё, без чего окно уже можно нарисовать, отложено сюда
+    /// (задача #31): движок, плееры, вывод кадра и открытие файлов — это две трети
+    /// времени до окна, а увидеть их раньше самого окна всё равно нельзя. Ввод при
+    /// этом не теряется: сообщения ждут в очереди того же потока и разбираются, когда
+    /// окно уже готово.
+    /// </summary>
+    private void OnFirstFrame(object? sender, EventArgs e)
+    {
+        ContentRendered -= OnFirstFrame;
+        StartupTrace.Mark("shown");
+
+        if (!App.StartEngine(this)) return;
+        StartupTrace.Mark("engine");
+
         _a = new PlayerTrack(TrackId.A);
         _b = new PlayerTrack(TrackId.B);
         StartupTrace.Mark("players");
 
+        InitPlayback();
+        StartupTrace.Mark("ready");
+
+        AttachVideoHost(PaneA, OverlayA, _a);
+        AttachVideoHost(PaneB, OverlayB, _b);
+        StartupTrace.Mark("hosts");
+
+        OpenStartupFiles();
+        StartupTrace.Mark("files");
+        StartupTrace.Flush();
+    }
+
+    /// <summary>
+    /// Свести треки под общий транспорт и подготовить интерфейс к работе: всё, чему
+    /// нужны готовые плееры. До этого момента окно уже нарисовано, но пустое.
+    /// </summary>
+    private void InitPlayback()
+    {
         _sync = new SyncEngine(_a, _b);
         _sync.PositionChanged += (_, _) => Dispatcher.BeginInvoke(UpdatePosition);
         _sync.StateChanged += (_, _) => Dispatcher.BeginInvoke(UpdateState);
@@ -103,9 +143,6 @@ public partial class MainWindow : AppWindow
         // вещь, которую надо уметь проверить, а не принимать на веру.
         _sync.Corrected += (_, ms) => Dispatcher.BeginInvoke(() =>
             Status($"ведомый трек подтянут: расхождение {ms:+0;-0} мс"));
-
-        Loaded += OnLoaded;
-        Closed += OnClosed;
 
         // FlyleafHost выводит кадр в собственные окна (поверхность и накладка),
         // и когда фокус уходит туда, события клавиатуры до главного окна не доходят.
@@ -140,27 +177,6 @@ public partial class MainWindow : AppWindow
         Drop += (s, e) => OnDrop(s, e, _active);
 
         InitRemote();
-        StartupTrace.Mark("ctor-done");
-
-        if (StartupTrace.Enabled)
-            ContentRendered += (_, _) =>
-            {
-                StartupTrace.Mark("shown");
-                StartupTrace.Flush();
-            };
-    }
-
-    private PlayerTrack Active => _sync.Track(_active);
-    private PlayerTrack SideTrack => _sync.Track(_sideTrack);
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        StartupTrace.Mark("loaded");
-
-        VideoHostA.Player = _a.Flyleaf.Player;
-        VideoHostB.Player = _b.Flyleaf.Player;
-        StartupTrace.Mark("hosts");
-
         InitCacheUi();
         InitTimeline();
         InitCompact();
@@ -181,7 +197,42 @@ public partial class MainWindow : AppWindow
         Status(string.IsNullOrEmpty(AppEnv.FFmpegDir)
             ? "FFmpeg не найден — открыть файл не получится"
             : "файл не открыт");
+    }
 
+    /// <summary>
+    /// Подставить в панель трека вывод кадра. В разметке этот элемент стоил около 200 мс
+    /// холодного старта, поэтому создаётся кодом: разметка панели становится
+    /// накладкой хоста — тем же самым, чем была внутри него в XAML.
+    /// </summary>
+    private void AttachVideoHost(Border pane, Grid overlay, PlayerTrack track)
+    {
+        var host = new FlyleafHost
+        {
+            VideoBackground = (Brush)FindResource("VideoBrush"),
+            KeyBindings = AvailableWindows.None,
+            OpenOnDrop = AvailableWindows.None,
+            SwapOnDrop = AvailableWindows.None,
+            ToggleFullScreenOnDoubleClick = AvailableWindows.None
+        };
+
+        // В коэффициент заполнения кадра (задача #28) входит соотношение сторон области
+        // вывода, а оно меняется и от размера окна, и от раскладки «рядом / только A».
+        host.SizeChanged += (_, _) => ApplyScale();
+
+        // Накладку сначала отцепляем от панели: у элемента WPF один родитель.
+        pane.Child = null;
+        host.Content = overlay;
+        pane.Child = host;
+
+        host.Player = track.Flyleaf.Player;
+    }
+
+    /// <summary>
+    /// Что показать при запуске: файлы командной строки, а без них — прошлая сессия.
+    /// Файлы из командной строки сильнее сессии: их открыли осознанно именно сейчас.
+    /// </summary>
+    private void OpenStartupFiles()
+    {
         if (App.StartupFile is { } file)
         {
             var opened = OpenFile(_a, file);
@@ -190,16 +241,16 @@ public partial class MainWindow : AppWindow
                 opened |= OpenFile(_b, second);
 
             ApplyStartupLayout();
-            StartupTrace.Mark("files");
             if (opened) AutoPlayAfterOpen();
             return;
         }
 
-        // Файлы из командной строки сильнее сессии: их открыли осознанно именно сейчас.
         RestoreLastSession();
         ApplyStartupLayout();
-        StartupTrace.Mark("files");
     }
+
+    private PlayerTrack Active => _sync.Track(_active);
+    private PlayerTrack SideTrack => _sync.Track(_sideTrack);
 
     /// <summary>
     /// Вид кадра при запуске (настройка, задача #17). «Как в прошлый раз» ничего не
@@ -240,6 +291,10 @@ public partial class MainWindow : AppWindow
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        // Окно закрылось, не дойдя до готовности: так бывает, когда движок не поднялся
+        // и приложение гасит себя само. Разбирать тогда нечего — и нечем.
+        if (_sync is null) return;
+
         StopShuttle();
 
         // Курсор мог остаться спрятанным полноэкранным режимом — счётчик системный,

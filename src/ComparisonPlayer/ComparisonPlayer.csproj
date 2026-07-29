@@ -20,6 +20,12 @@
     <Copyright>© 2026</Copyright>
     <!-- Иконка exe; генерируется из docs/app-icon.svg через tools/make-app-icon.ps1 -->
     <ApplicationIcon>app.ico</ApplicationIcon>
+
+    <!-- Холодный старт (задача #31). Почти всё время до окна уходило на JIT: без
+         предкомпиляции разбор XAML главного окна и создание плееров компилируются
+         на месте при каждом запуске. Замер серией (tools/measure-startup.ps1):
+         1383 → 1110 мс. Платим размером поставки — образ R2R крупнее. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>

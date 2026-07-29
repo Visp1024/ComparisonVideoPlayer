@@ -20,12 +20,6 @@ public partial class MainWindow
     private void InitScale()
     {
         _scale = App.Settings.VideoScale;
-
-        // В коэффициент заполнения входит соотношение сторон области вывода, а оно
-        // меняется и от размера окна, и от раскладки «рядом / только A».
-        VideoHostA.SizeChanged += (_, _) => ApplyScale();
-        VideoHostB.SizeChanged += (_, _) => ApplyScale();
-
         ApplyScale();
     }
 

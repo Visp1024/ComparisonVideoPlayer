@@ -11,6 +11,7 @@
         -FrameworkDependent   без рантайма .NET внутри (нужен установленный .NET 9 Desktop)
         -NoSingleFile         обычная папка со сборками вместо одного exe
         -NoFFmpeg             не копировать FFmpeg в билд
+        -Compress             сжать содержимое single-file exe (втрое меньше, но старт медленнее)
         -FFmpegDir <путь>     явный каталог с avcodec-*.dll и ffmpeg.exe
         -OutDir <путь>        куда класть результат
         -Version <x.y.z>      версия поставки вместо указанной в csproj (её ставит CI из тега)
@@ -28,6 +29,7 @@ param(
     [switch] $FrameworkDependent,
     [switch] $NoSingleFile,
     [switch] $NoFFmpeg,
+    [switch] $Compress,
     [switch] $Zip
 )
 
@@ -75,7 +77,11 @@ if (-not $NoSingleFile) {
         # обязаны распаковываться на диск: из памяти они не грузятся.
         '-p:IncludeNativeLibrariesForSelfExtract=true'
     )
-    if ($selfContained) { $publishArgs += '-p:EnableCompressionInSingleFile=true' }
+    # Сжатие содержимого exe по умолчанию выключено (задача #31): распаковка идёт
+    # при каждом запуске и стоит около 130 мс из ~1,4 с холодного старта, а с
+    # предкомпилированным кодом (ReadyToRun) — вдвое больше. Ключ оставлен для
+    # случая, когда важнее размер файла.
+    if ($selfContained -and $Compress) { $publishArgs += '-p:EnableCompressionInSingleFile=true' }
 }
 
 Write-Host "dotnet $($publishArgs -join ' ')" -ForegroundColor DarkGray
@@ -112,6 +118,7 @@ $sizeMb = [math]::Round(((Get-ChildItem -LiteralPath $OutDir -Recurse -File |
     Measure-Object -Property Length -Sum).Sum / 1MB), 1)
 $mode = if ($selfContained) { 'self-contained' } else { 'framework-dependent' }
 if (-not $NoSingleFile) { $mode += ', single-file' }
+if ($selfContained -and $Compress) { $mode += ', сжатый' }
 
 # Переносимый вариант поставки: распаковал куда угодно и запустил, без установки.
 $zipPath = ''

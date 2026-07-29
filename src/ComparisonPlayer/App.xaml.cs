@@ -33,9 +33,12 @@ public partial class App : Application
         var files = e.Args.Where(a => !a.StartsWith('-')).ToList();
         StartupFile = files.FirstOrDefault();
         StartupFileB = files.Skip(1).FirstOrDefault();
-        Settings = Settings.Load();
         Directory.CreateDirectory(AppEnv.DataDir);
-        AppEnv.CleanupEngineLogs();
+        Settings = Settings.Load();
+
+        // Уборка журналов прошлых запусков к появлению окна отношения не имеет —
+        // держать на ней холодный старт незачем (задача #31).
+        Task.Run(AppEnv.CleanupEngineLogs);
         StartupTrace.Mark("settings");
 
         // Библиотек нет — предлагаем скачать их до старта движка. Иначе Engine.Start
@@ -51,6 +54,18 @@ public partial class App : Application
             ShutdownMode = shutdownMode;
         }
 
+        base.OnStartup(e);
+    }
+
+    /// <summary>
+    /// Поднять движок воспроизведения. Вызывается окном сразу после первого показа
+    /// (задача #31): до Engine.Start окну ничего от движка не нужно, а ждать его
+    /// раньше окна — это ~80 мс пустого экрана. Ошибку показываем и гасим приложение:
+    /// без движка плеер всё равно ничего не откроет.
+    /// </summary>
+    /// <returns>false — движок не поднялся и приложение закрывается.</returns>
+    public static bool StartEngine(Window owner)
+    {
         try
         {
             Engine.Start(new EngineConfig
@@ -61,6 +76,8 @@ public partial class App : Application
                 LogOutput = AppEnv.EngineLogFile,
                 LogLevel = LogLevel.Info
             });
+
+            return true;
         }
         catch (Exception ex)
         {
@@ -78,13 +95,10 @@ public partial class App : Application
                          (string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "(не найден)" : AppEnv.FFmpegDir);
             }
 
-            MessageDialog.Show(null, "CVP", message, detail);
-            Shutdown(1);
-            return;
+            MessageDialog.Show(owner, "CVP", message, detail);
+            Current.Shutdown(1);
+            return false;
         }
-
-        StartupTrace.Mark("engine");
-        base.OnStartup(e);
     }
 
     protected override void OnExit(ExitEventArgs e)
