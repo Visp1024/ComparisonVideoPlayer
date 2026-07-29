@@ -163,6 +163,11 @@ public sealed class PipeServer : IDisposable
 
     private void Handle(string line)
     {
+        // Пустая строка — keep-alive клиента: односторонний канал иначе не замечает,
+        // что плеер закрылся, и Unity продолжает считать себя подключённым. Молча:
+        // засорять журнал раз в полсекунды нельзя.
+        if (string.IsNullOrWhiteSpace(line)) return;
+
         if (RemoteCommand.TryParse(line, out var command, out var error))
         {
             _log.Add(command!.Describe());

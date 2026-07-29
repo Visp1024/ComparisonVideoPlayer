@@ -1,0 +1,8 @@
+{
+  "name": "com.cvp.link",
+  "version": "1.0.0",
+  "displayName": "CVP Link",
+  "description": "Запуск отрезка видео в плеере CVP из кода Unity. Отрезок и файлы задаются в самом плеере; отсюда идут только команды транспорта.",
+  "unity": "2021.3",
+  "author": { "name": "CVP" }
+}
