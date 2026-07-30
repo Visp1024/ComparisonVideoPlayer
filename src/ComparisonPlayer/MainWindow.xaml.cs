@@ -221,7 +221,15 @@ public partial class MainWindow : AppWindow
         {
             VideoBackground = (Brush)FindResource("VideoBrush"),
             KeyBindings = AvailableWindows.None,
-            OpenOnDrop = AvailableWindows.None,
+
+            // Приём перетаскивания на своих окнах FlyleafHost включает ровно этим флагом
+            // (AllowDrop = OpenOnDrop/SwapOnDrop). Со снятым флагом окна хоста закрывали
+            // почти весь кадр и глотали бросок целиком — файл, брошенный в плеер, не
+            // доходил никуда (задача #35). Нужны оба окна: накладка ловит бросок там, где
+            // она непрозрачна (пустой трек), а над играющим кадром — окно вывода.
+            // Сам хост файл не откроет: наши обработчики помечают событие обработанным,
+            // а его Surface_Drop / Overlay_Drop смотрят на e.Handled.
+            OpenOnDrop = AvailableWindows.Both,
             SwapOnDrop = AvailableWindows.None,
             ToggleFullScreenOnDoubleClick = AvailableWindows.None
         };
@@ -236,6 +244,23 @@ public partial class MainWindow : AppWindow
         pane.Child = host;
 
         host.Player = track.Flyleaf.Player;
+
+        if (host.Surface is null) host.SurfaceCreated += (_, _) => HookSurfaceDrag(host, track.Id);
+        else HookSurfaceDrag(host, track.Id);
+    }
+
+    /// <summary>
+    /// Подписать окно вывода кадра на перетаскивание. Накладка хоста прозрачна, и над
+    /// играющим кадром Windows проносит указатель сквозь неё — бросок достаётся окну
+    /// вывода, которое лежит ниже. Отдельных событий наведения FlyleafHost на нём не даёт,
+    /// поэтому берём их прямо с окна; бросок он отдаёт сам через <c>OnSurfaceDrop</c>,
+    /// а помеченное обработанным событие останавливает его собственное открытие файла.
+    /// </summary>
+    private void HookSurfaceDrag(FlyleafHost host, TrackId id)
+    {
+        host.Surface.DragOver += (s, e) => OnDragOver(s, e, id);
+        host.Surface.DragLeave += OnDragLeave;
+        host.OnSurfaceDrop += (s, e) => OnDrop(s, e, id);
     }
 
     /// <summary>
