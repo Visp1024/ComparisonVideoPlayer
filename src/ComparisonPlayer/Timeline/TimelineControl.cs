@@ -165,13 +165,6 @@ public sealed class TimelineControl : FrameworkElement
 
     private long LastFrame => Math.Max(_frameCount - 1, 0);
 
-    /// <summary>
-    /// Ярлыки с буквами треков нужны, только когда роликов два: одному помечать себя
-    /// нечем от чего отличаться, и цветная полоса у левого края лишь закрывала бы
-    /// миниатюры (та же честность одного ролика, что и над кадром — задачи #32, #34).
-    /// </summary>
-    private bool ShowTrackLabels => _tracks.Count(t => t.IsOpen) > 1;
-
     // ---------- события ----------
 
     /// <summary>Playhead взяли мышью.</summary>
@@ -750,7 +743,7 @@ public sealed class TimelineControl : FrameworkElement
 
         if (!view.IsOpen)
         {
-            if (ShowTrackLabels) DrawTrackLabel(dc, rect, view, tint, faded: true);
+            DrawTrackLabel(dc, rect, view, tint, faded: true);
             return;
         }
 
@@ -771,7 +764,7 @@ public sealed class TimelineControl : FrameworkElement
         }
 
         dc.Pop();
-        if (ShowTrackLabels) DrawTrackLabel(dc, rect, view, tint, faded: false);
+        DrawTrackLabel(dc, rect, view, tint, faded: false);
     }
 
     /// <summary>Ярлык с буквой трека у левого края дорожки; у мастера — звёздочка.</summary>
