@@ -13,7 +13,7 @@
     <AssemblyName>ComparisonPlayer</AssemblyName>
     <RootNamespace>ComparisonPlayer</RootNamespace>
     <!-- Версия поставки: её же берут tools/publish.ps1 (имя архива) и инсталлятор -->
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Product>CVP</Product>
     <Description>Покадровое сравнение двух видео</Description>
     <Company>CVP</Company>
