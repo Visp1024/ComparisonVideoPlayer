@@ -125,6 +125,12 @@ public partial class MainWindow
                 SeekFrame(_sync.SegmentInFrame);
                 break;
 
+            // Тот же StepBy, что у стрелок и кнопок транспорта: шаг сам снимает
+            // воспроизведение с паузой, так что Step на игре останавливает видео.
+            case RemoteCommandKind.Step:
+                StepBy(command.Flag ? 1 : -1);
+                break;
+
             case RemoteCommandKind.Loop when command.Flag != _loop:
                 ToggleLoop();
                 break;

@@ -17,6 +17,9 @@ public enum RemoteCommandKind
     /// <summary>Встать на начало отрезка, не запуская.</summary>
     Rewind,
 
+    /// <summary>Шаг на один кадр; <see cref="RemoteCommand.Flag"/> — вперёд или назад.</summary>
+    Step,
+
     /// <summary>Петля по отрезку; <see cref="RemoteCommand.Flag"/> — включить или выключить.</summary>
     Loop
 }
@@ -27,8 +30,9 @@ public enum RemoteCommandKind
 /// </summary>
 /// <param name="Flag">
 /// Единственный параметр протокола: для <see cref="RemoteCommandKind.Play"/> это
-/// «с начала отрезка», для <see cref="RemoteCommandKind.Loop"/> — «включить».
-/// Держать два одинаковых по типу поля с разными именами смысла нет.
+/// «с начала отрезка», для <see cref="RemoteCommandKind.Loop"/> — «включить», для
+/// <see cref="RemoteCommandKind.Step"/> — «вперёд».
+/// Держать три одинаковых по типу поля с разными именами смысла нет.
 /// </param>
 public sealed record RemoteCommand(RemoteCommandKind Kind, bool Flag)
 {
@@ -69,6 +73,10 @@ public sealed record RemoteCommand(RemoteCommandKind Kind, bool Flag)
                 case "pause": command = new RemoteCommand(RemoteCommandKind.Pause, false); return true;
                 case "stop": command = new RemoteCommand(RemoteCommandKind.Stop, false); return true;
                 case "rewind": command = new RemoteCommand(RemoteCommandKind.Rewind, false); return true;
+
+                // forward по умолчанию true: шаг без уточнения — это шаг вперёд, как
+                // Step в редакторе Unity, откуда команда чаще всего и приходит.
+                case "step": command = new RemoteCommand(RemoteCommandKind.Step, Bool(root, "forward", true)); return true;
                 case "loop": command = new RemoteCommand(RemoteCommandKind.Loop, Bool(root, "on", true)); return true;
                 default: error = $"неизвестная команда «{name}»"; return false;
             }
@@ -92,6 +100,7 @@ public sealed record RemoteCommand(RemoteCommandKind Kind, bool Flag)
         RemoteCommandKind.Pause => "pause",
         RemoteCommandKind.Stop => "stop",
         RemoteCommandKind.Rewind => "rewind",
+        RemoteCommandKind.Step => Flag ? "step вперёд" : "step назад",
         RemoteCommandKind.Loop => Flag ? "loop включена" : "loop выключена",
         _ => Kind.ToString()
     };

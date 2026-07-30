@@ -63,6 +63,16 @@ namespace Cvp
         /// <summary>Встать на начало отрезка, не запуская воспроизведение.</summary>
         public static void Rewind() { Send("{\"cmd\":\"rewind\"}"); }
 
+        /// <summary>
+        /// Шаг ровно на один кадр. Как и в самом плеере, шаг снимает воспроизведение:
+        /// после команды плеер стоит на паузе на новом кадре.
+        /// </summary>
+        /// <param name="forward">true (по умолчанию) — вперёд, false — назад.</param>
+        public static void Step(bool forward = true)
+        {
+            Send("{\"cmd\":\"step\",\"forward\":" + (forward ? "true" : "false") + "}");
+        }
+
         /// <summary>Повторять отрезок по кругу.</summary>
         public static void SetLoop(bool on)
         {

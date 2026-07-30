@@ -15,7 +15,7 @@ namespace Cvp.Editor
         [MenuItem("Window/CVP Link")]
         private static void Open()
         {
-            GetWindow<CvpLinkWindow>("CVP Link").minSize = new Vector2(240, 190);
+            GetWindow<CvpLinkWindow>("CVP Link").minSize = new Vector2(260, 250);
         }
 
         private void OnEnable()
@@ -45,6 +45,14 @@ namespace Cvp.Editor
             _pipeName = EditorGUILayout.TextField("Имя канала", _pipeName);
             if (EditorGUI.EndChangeCheck()) CvpPlayer.PipeName = _pipeName;
 
+            EditorGUI.BeginChangeCheck();
+            var follow = EditorGUILayout.ToggleLeft(
+                new GUIContent(
+                    "Следовать за паузой и Step",
+                    "Пауза редактора ставит на паузу и видео, Step переводит его на кадр."),
+                CvpEditorPause.Enabled);
+            if (EditorGUI.EndChangeCheck()) CvpEditorPause.Enabled = follow;
+
             EditorGUILayout.Space(8);
 
             using (new EditorGUI.DisabledScope(!connected))
@@ -56,6 +64,12 @@ namespace Cvp.Editor
                     if (GUILayout.Button("Пауза")) CvpPlayer.Pause();
                     if (GUILayout.Button("Стоп")) CvpPlayer.Stop();
                     if (GUILayout.Button("В начало")) CvpPlayer.Rewind();
+                }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("◀ Кадр")) CvpPlayer.Step(false);
+                    if (GUILayout.Button("Кадр ▶")) CvpPlayer.Step();
                 }
 
                 using (new EditorGUILayout.HorizontalScope())

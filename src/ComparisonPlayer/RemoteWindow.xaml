@@ -62,7 +62,7 @@
             <TextBlock Grid.Row="2" Margin="0,0,0,16" TextWrapping="Wrap"
                        FontFamily="{StaticResource MonoFont}" FontSize="12"
                        Foreground="{StaticResource AccentBrush}"
-                       Text="play · pause · stop · rewind · loop" />
+                       Text="play · pause · stop · rewind · step · loop" />
 
             <DockPanel Grid.Row="3">
                 <TextBlock DockPanel.Dock="Top" Text="П О С Л Е Д Н И Е   С О Б Ы Т И Я"
