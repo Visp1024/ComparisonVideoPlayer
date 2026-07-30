@@ -295,6 +295,10 @@ public partial class MainWindow : AppWindow
     /// </summary>
     private void ApplyStartupLayout()
     {
+        // Пара роликов из командной строки открылась «рядом» ещё в PrepareFirstFrame и
+        // настройке не подчиняется: их назвали вместе, чтобы сравнить.
+        if (App.StartupFile is not null && BothOpen()) return;
+
         if (StartupLayoutSetting() is not { } layout || layout == _layout) return;
 
         _layout = layout;
@@ -344,11 +348,16 @@ public partial class MainWindow : AppWindow
         // Настройка сильнее сессии — так же, как в ApplyStartupLayout после открытия
         // файлов. «Как в прошлый раз» берёт вид из сессии, но только если из неё что-то
         // откроется: сессия без единого файла не восстанавливается и вида не меняет.
-        _layout = StartupLayoutSetting()
-                  ?? (App.StartupFile is null && (openA || openB)
-                      && Enum.TryParse<LayoutMode>(StartupSession()!.Layout, out var saved)
-                          ? saved
-                          : LayoutMode.Side);
+        // Пара файлов в командной строке сильнее и настройки: два ролика открывают,
+        // чтобы их сравнить, — прятать один из них под «только A» значило бы не
+        // выполнить просьбу (тем же правилом живёт бросок второго ролика в окно).
+        _layout = App.StartupFile is not null && openA && openB
+            ? LayoutMode.Side
+            : StartupLayoutSetting()
+              ?? (App.StartupFile is null && (openA || openB)
+                  && Enum.TryParse<LayoutMode>(StartupSession()!.Layout, out var saved)
+                      ? saved
+                      : LayoutMode.Side);
 
         ApplyLayout(openA, openB);
         ApplyTrackIndication(openA, openB);
@@ -652,25 +661,47 @@ public partial class MainWindow : AppWindow
     }
 
     /// <summary>
-    /// Переключение раскладки по кругу (V). Без второго ролика выбирать не из чего:
-    /// «только B» вело бы в пустой экран, поэтому вместо переключения плеер говорит
-    /// об этом в строке состояния (задача #32).
+    /// Переключение раскладки по кругу (V). Круг идёт по тем же видам, что доступны в
+    /// таблетке: недостающий трек свой вид пропускает, чтобы клавиша не приводила в
+    /// пустой экран (задача #38). На одном ролике круг сжимается до «только он» ↔ «оба» —
+    /// раньше вместо переключения плеер отказывал (задача #32), а с настройкой
+    /// «открывать только A» вернуться к сравнению по V нужно как раз с одним роликом.
     /// </summary>
     private void CycleLayout()
     {
-        if (!BothOpen())
+        // Отсчёт от того вида, который видно: выбранный трек могли закрыть.
+        var next = EffectiveLayout(_a.IsOpen, _b.IsOpen);
+
+        // Видов три, и «оба» доступно всегда, — круг заведомо замкнётся.
+        for (var i = 0; i < 3; i++)
         {
-            Status("раскладка нужна двум роликам: второй трек не открыт");
-            return;
+            next = next switch
+            {
+                LayoutMode.Side => LayoutMode.OnlyA,
+                LayoutMode.OnlyA => LayoutMode.OnlyB,
+                _ => LayoutMode.Side
+            };
+
+            if (LayoutAvailable(next)) break;
         }
 
-        SetLayout(_layout switch
-        {
-            LayoutMode.Side => LayoutMode.OnlyA,
-            LayoutMode.OnlyA => LayoutMode.OnlyB,
-            _ => LayoutMode.Side
-        });
+        SetLayout(next);
     }
+
+    /// <summary>Вид, ведущий в пустой экран, недоступен — так же, как в таблетке.</summary>
+    private bool LayoutAvailable(LayoutMode mode) => LayoutAvailable(mode, _a.IsOpen, _b.IsOpen);
+
+    /// <summary>
+    /// То же при известной занятости треков (до первой отрисовки их ещё нет). Пустой плеер
+    /// доступного не сужает: без единого ролика любой вид одинаково пуст, а ограничение
+    /// на нём выглядело бы поломкой.
+    /// </summary>
+    private static bool LayoutAvailable(LayoutMode mode, bool openA, bool openB) => mode switch
+    {
+        LayoutMode.OnlyA => openA || !openB,
+        LayoutMode.OnlyB => openB || !openA,
+        _ => true
+    };
 
     /// <summary>Щелчок по сегменту таблетки раскладки.</summary>
     private void Layout_Checked(object sender, RoutedEventArgs e)
@@ -704,13 +735,7 @@ public partial class MainWindow : AppWindow
     /// </summary>
     private void ApplyLayout(bool openA, bool openB)
     {
-        // Выбранный трек могли закрыть — тогда раскладка показала бы пустоту.
-        var layout = _layout switch
-        {
-            LayoutMode.OnlyA when !openA && openB => LayoutMode.OnlyB,
-            LayoutMode.OnlyB when !openB && openA => LayoutMode.OnlyA,
-            _ => _layout
-        };
+        var layout = EffectiveLayout(openA, openB);
 
         var showA = layout != LayoutMode.OnlyB;
         var showB = layout != LayoutMode.OnlyA;
@@ -720,6 +745,35 @@ public partial class MainWindow : AppWindow
 
         PaneAColumn.Width = showA ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         PaneBColumn.Width = showB ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+        ApplyLayoutSegments(openA, openB);
+    }
+
+    /// <summary>
+    /// Раскладка, которую видно на самом деле: выбранный трек могли закрыть — тогда
+    /// «только он» показало бы пустоту, и вид переходит на открытый.
+    /// </summary>
+    private LayoutMode EffectiveLayout(bool openA, bool openB) => _layout switch
+    {
+        LayoutMode.OnlyA when !openA && openB => LayoutMode.OnlyB,
+        LayoutMode.OnlyB when !openB && openA => LayoutMode.OnlyA,
+        _ => _layout
+    };
+
+    /// <summary>
+    /// Состояние таблетки раскладки. Видна она всегда, даже на одном ролике (задача #38):
+    /// раньше таблетка пропадала целиком, и по виду окна нельзя было понять, что вид
+    /// выбирается, — а с настройкой «открывать только A» именно это и нужно знать.
+    /// Недостающий трек лишь гасит свой сегмент: «только B» без ролика B вело бы в пустой
+    /// экран, тогда как «оба» показывает открытый кадр рядом с приглашением перетащить
+    /// второй.
+    /// </summary>
+    private void ApplyLayoutSegments(bool openA, bool openB)
+    {
+        SegLayoutA.IsEnabled = LayoutAvailable(LayoutMode.OnlyA, openA, openB);
+        SegLayoutB.IsEnabled = LayoutAvailable(LayoutMode.OnlyB, openA, openB);
+
+        var layout = EffectiveLayout(openA, openB);
 
         _syncingSegments = true;
         SegLayoutA.IsChecked = layout == LayoutMode.OnlyA;
@@ -1851,15 +1905,16 @@ public partial class MainWindow : AppWindow
 
     /// <summary>
     /// Пометки треков (задача #32). При одном открытом ролике исчезают буква над кадром,
-    /// буква в счётчике кадров (её убирает <see cref="ShowTrackLabels"/>), выбор раскладки
-    /// и вкладки A / B боковой панели — выбирать в них не из чего.
+    /// буква в счётчике кадров (её убирает <see cref="ShowTrackLabels"/>) и вкладки A / B
+    /// боковой панели — выбирать в них не из чего. Таблетка раскладки остаётся всегда
+    /// (задача #38): см. <see cref="ApplyLayoutSegments"/>.
     /// </summary>
     private void UpdateTrackIndication() => ApplyTrackIndication(_a.IsOpen, _b.IsOpen);
 
     /// <summary>
     /// То же при известной занятости треков: до первой отрисовки их ещё нет, а пометки
-    /// уже должны стоять по месту — иначе таблетка раскладки и вкладки A / B мелькали бы
-    /// на одном открытом ролике (задача #37).
+    /// уже должны стоять по месту — иначе вкладки A / B мелькали бы на одном открытом
+    /// ролике (задача #37).
     /// </summary>
     private void ApplyTrackIndication(bool openA, bool openB)
     {
@@ -1869,9 +1924,9 @@ public partial class MainWindow : AppWindow
         PaneLetterA.Visibility = letters;
         PaneLetterB.Visibility = letters;
 
-        var pair = both ? Visibility.Visible : Visibility.Collapsed;
-        LayoutPill.Visibility = pair;
-        SideTabs.Visibility = pair;
+        SideTabs.Visibility = both ? Visibility.Visible : Visibility.Collapsed;
+
+        ApplyLayoutSegments(openA, openB);
 
         // Панель показывала бы прочерки по закрытому треку — переводим её на открытый.
         if (openA ^ openB) _sideTrack = openA ? TrackId.A : TrackId.B;

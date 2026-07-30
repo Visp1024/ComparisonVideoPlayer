@@ -82,8 +82,8 @@
                 <Border Width="1" Margin="4,2,10,2" Background="{StaticResource LineBrush}" />
 
                 <!-- Раскладка таблеткой: кнопка по кругу не показывала, между чем выбор.
-                     Второго ролика нет — прятать целиком (задача #32): «только B» вело
-                     в пустой экран. -->
+                     Видна всегда, в том числе на одном ролике (задача #38): недостающий
+                     трек только гасит свой сегмент — «только B» вело бы в пустой экран. -->
                 <Border x:Name="LayoutPill" Style="{StaticResource SegPill}"
                         ToolTip="Что показывать: только A / оба кадра / только B (V)">
                     <StackPanel Orientation="Horizontal">
@@ -111,10 +111,6 @@
 
                 <Button x:Name="BtnInfo" Style="{StaticResource IconButton}" Tag="{StaticResource IcoInfo}"
                         Click="Info_Click" ToolTip="Сведения о файле (Ctrl+I)" />
-
-                <!-- Кэш кадров: индикаторы режима по треку и панель управления -->
-                <Button x:Name="BtnCache" Style="{StaticResource IconButton}" Tag="{StaticResource IcoCache}"
-                        Click="Cache_Click" ToolTip="Режим кэша кадров, объём хранилища (C)" />
 
                 <Button x:Name="BtnFullScreen" DockPanel.Dock="Right" Style="{StaticResource IconButton}"
                         Tag="{StaticResource IcoFullscreen}" Margin="6,0,0,0" Click="FullScreen_Click"
@@ -162,6 +158,14 @@
                         </Viewbox>
                     </StackPanel>
                 </Button>
+
+                <!-- Кэш кадров: панель управления. Кнопка стоит справа, рядом с Unity
+                     (задача #38): кэш — про хранилище и служебные режимы, а не про то,
+                     как показан кадр, — и слева от неё через разделитель уже стоят её
+                     собственные индикаторы режима и остановка сборки. -->
+                <Button x:Name="BtnCache" DockPanel.Dock="Right" Style="{StaticResource IconButton}"
+                        Tag="{StaticResource IcoCache}" Margin="6,0,0,0"
+                        Click="Cache_Click" ToolTip="Режим кэша кадров, объём хранилища (C)" />
 
                 <Border Width="1" DockPanel.Dock="Right" Margin="10,2,4,2"
                         Background="{StaticResource LineBrush}" />
