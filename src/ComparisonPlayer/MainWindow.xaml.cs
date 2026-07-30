@@ -1857,11 +1857,14 @@ public partial class MainWindow : AppWindow
 
         // Полоска активного трека — часть интерфейса, и в полноэкранном виде (задача #28)
         // её нет вместе со всем остальным: у края экрана она читается как дефект картинки.
+        // Открыт один ролик — активным ему быть не с кем, и полоса у края кадра только
+        // помечает единственное, что на экране есть (задача #34).
         // Между двумя кадрами остаётся тонкий разделитель — иначе они сливаются в один.
-        PaneA.BorderThickness = new Thickness(_active == TrackId.A && !_fullscreen ? 2 : 0, 0, 0, 0);
+        var showActive = BothOpen() && !_fullscreen;
+        PaneA.BorderThickness = new Thickness(showActive && _active == TrackId.A ? 2 : 0, 0, 0, 0);
         PaneA.BorderBrush = (Brush)FindResource("AccentBrush");
-        PaneB.BorderThickness = new Thickness(_active == TrackId.B && !_fullscreen ? 2 : 1, 0, 0, 0);
-        PaneB.BorderBrush = (Brush)FindResource(_active == TrackId.B && !_fullscreen ? "TrackBBrush" : "LineBrush");
+        PaneB.BorderThickness = new Thickness(showActive && _active == TrackId.B ? 2 : 1, 0, 0, 0);
+        PaneB.BorderBrush = (Brush)FindResource(showActive && _active == TrackId.B ? "TrackBBrush" : "LineBrush");
 
         PaneNameA.Text = _a.IsOpen ? _a.Media!.FileName : "";
         PaneNameB.Text = _b.IsOpen ? _b.Media!.FileName : "";
