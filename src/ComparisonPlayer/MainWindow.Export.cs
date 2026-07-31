@@ -53,6 +53,13 @@ public partial class MainWindow
         if (!track.IsOpen || track.Media is null) return;
 
         _sync.Pause();
-        new ExportWindow(track) { Owner = this }.ShowDialog();
+
+        var dialog = new ExportWindow(track) { Owner = this };
+        dialog.ShowDialog();
+
+        // Готовый кусок открываем в том же треке, из которого его вырезали: сравнивать
+        // его логично с соседним роликом, а не с оригиналом, из которого он и взят.
+        if (dialog.FileToOpen is { } file && OpenFile(track, file))
+            AutoPlayAfterOpen();
     }
 }

@@ -99,6 +99,9 @@
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="BtnPrimary" Style="{StaticResource PrimaryButton}"
                         Padding="16,6" IsDefault="True" Content="Вырезать" Click="Primary_Click" />
+                <!-- Появляется только у готового файла: до него показывать нечего -->
+                <Button x:Name="BtnReveal" Style="{StaticResource ToolButton}" Visibility="Collapsed"
+                        Padding="16,6" Content="Показать в папке" Click="Reveal_Click" />
                 <!-- Не IsCancel: во время работы эта кнопка снимает ffmpeg, а не закрывает окно -->
                 <Button x:Name="BtnSecondary" Style="{StaticResource ToolButton}" Margin="0"
                         Padding="16,6" Content="Отмена" Click="Secondary_Click" />

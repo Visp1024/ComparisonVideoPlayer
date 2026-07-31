@@ -62,6 +62,13 @@ public partial class ExportWindow : AppWindow
         TxtStatus.Text = "Вырезаем из исходного файла — прокси кэша для этого не используется.";
     }
 
+    /// <summary>
+    /// Вырезанный файл, который просили открыть в плеере вместо текущего ролика;
+    /// <c>null</c> — окно закрыли, ничего не открывая. Забирает его окно-владелец:
+    /// треками и раскладкой распоряжается оно, а не диалог.
+    /// </summary>
+    public string? FileToOpen { get; private set; }
+
     private bool Busy => _cancel is not null;
 
     private ExportMode Mode => ChipCopy.IsChecked == true ? ExportMode.Copy : ExportMode.Precise;
@@ -116,10 +123,12 @@ public partial class ExportWindow : AppWindow
     {
         if (Busy) return;
 
-        // После удачного вырезания та же кнопка показывает файл в проводнике.
+        // После удачного вырезания та же кнопка открывает готовый кусок в плеере —
+        // чаще всего его и хотят посмотреть сразу.
         if (_done)
         {
-            Reveal(OutputPath);
+            FileToOpen = OutputPath;
+            Close();
             return;
         }
 
@@ -205,9 +214,12 @@ public partial class ExportWindow : AppWindow
         TxtStatus.Text = path;
 
         BtnPrimary.IsEnabled = true;
-        BtnPrimary.Content = "Показать в папке";
+        BtnPrimary.Content = "Открыть в плеере";
+        BtnReveal.Visibility = Visibility.Visible;
         BtnSecondary.Content = "Закрыть";
     }
+
+    private void Reveal_Click(object sender, RoutedEventArgs e) => Reveal(OutputPath);
 
     /// <summary>
     /// Вернуть окно к настройке: отказ ffmpeg чаще всего лечится сменой режима или
