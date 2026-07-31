@@ -1150,6 +1150,7 @@ public partial class MainWindow : AppWindow
         Timeline.OffsetDragged += (_, drag) => TimelineOffset(drag);
         Timeline.TrackActivated += (_, index) => SetActiveTrack(index == 0 ? TrackId.A : TrackId.B);
         Timeline.SegmentResetRequested += (_, index) => ResetSegment(index == 0 ? _a : _b);
+        Timeline.ClipMenuRequested += (_, index) => ShowClipMenu(index == 0 ? _a : _b);
 
         ShowSpeed();
         ShowOffset();

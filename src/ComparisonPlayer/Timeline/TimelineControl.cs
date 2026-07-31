@@ -188,6 +188,9 @@ public sealed class TimelineControl : FrameworkElement
     /// <summary>Двойной щелчок по клипу — сбросить его отрезок.</summary>
     public event EventHandler<int>? SegmentResetRequested;
 
+    /// <summary>Правая кнопка на клипе — окну показать меню этой дорожки.</summary>
+    public event EventHandler<int>? ClipMenuRequested;
+
     // ---------- материал ----------
 
     /// <summary>
@@ -514,6 +517,31 @@ public sealed class TimelineControl : FrameworkElement
                 OffsetDragged?.Invoke(this, new OffsetDrag(track, 0, Finished: true));
                 break;
         }
+    }
+
+    /// <summary>
+    /// Меню клипа (задача #40). Показываем его по отпусканию кнопки, а не по нажатию:
+    /// так меню не выскакивает под уезжающим курсором, если правой кнопкой промахнулись
+    /// мимо клипа и повели. Мимо клипа и над закрытой дорожкой меню не показывается —
+    /// резать там нечего.
+    /// </summary>
+    protected override void OnMouseRightButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonUp(e);
+        if (!IsOpen || _drag != TimelineDrag.None) return;
+
+        var point = e.GetPosition(this);
+        var index = TrackAt(point);
+        if (index < 0 || !_tracks[index].IsOpen) return;
+
+        var clip = ClipRect(index);
+        if (point.X < clip.Left || point.X > clip.Right) return;
+
+        // Меню всегда про дорожку под курсором — она же становится активной, иначе
+        // «вырезать» относилось бы к одному треку, а подсвечен был бы другой.
+        TrackActivated?.Invoke(this, index);
+        ClipMenuRequested?.Invoke(this, index);
+        e.Handled = true;
     }
 
     protected override void OnMouseDown(MouseButtonEventArgs e)

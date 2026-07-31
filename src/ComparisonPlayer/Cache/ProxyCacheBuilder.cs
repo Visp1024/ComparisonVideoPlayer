@@ -1,7 +1,5 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Text;
 using ComparisonPlayer.Playback;
 
 namespace ComparisonPlayer.Cache;
@@ -234,109 +232,18 @@ public sealed class ProxyCacheBuilder(FrameCacheStore store)
     }
 
     /// <summary>
-    /// Запуск ffmpeg с разбором блоков <c>-progress</c>. Блок приходит построчно
-    /// парами «ключ=значение» и заканчивается строкой <c>progress=</c>, по ней и
-    /// сообщаем прогресс наружу.
+    /// Запуск ffmpeg с прогрессом. Сам запуск и разбор блоков <c>-progress</c> общие
+    /// с вырезанием отрезка (<see cref="FFmpegRun"/>) — здесь только подписывается
+    /// этап, к которому относится отчёт.
     /// </summary>
-    private static async Task RunAsync(
-        string args, long total, BuildStage stage, IProgress<BuildProgress>? progress, CancellationToken ct)
-    {
-        var psi = new ProcessStartInfo(AppEnv.FFmpegExe, args)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
-        };
-
-        using var process = new Process { StartInfo = psi };
-
-        try
-        {
-            process.Start();
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"не удалось запустить ffmpeg ({AppEnv.FFmpegExe}): {ex.Message}", ex);
-        }
-
-        // Отмена = снять процесс: ffmpeg не умеет мягко прерываться без консоли.
-        using var kill = ct.Register(() =>
-        {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
-            catch (Exception) { /* уже завершился */ }
-        });
-
-        var errors = new StringBuilder();
-        var stderr = Task.Run(async () =>
-        {
-            var text = await process.StandardError.ReadToEndAsync();
-            errors.Append(text);
-        }, CancellationToken.None);
-
-        var started = Stopwatch.StartNew();
-        long frame = 0;
-        double speed = 0;
-
-        while (await process.StandardOutput.ReadLineAsync(CancellationToken.None) is { } line)
-        {
-            var split = line.IndexOf('=');
-            if (split <= 0) continue;
-
-            var name = line[..split].Trim();
-            var value = line[(split + 1)..].Trim();
-
-            switch (name)
-            {
-                case "frame":
-                    if (long.TryParse(value, out var f)) frame = f;
-                    break;
-
-                case "speed":
-                    // приходит как «1.42x», на старте бывает «N/A»
-                    if (double.TryParse(value.TrimEnd('x'), NumberStyles.Float, CultureInfo.InvariantCulture, out var s))
-                        speed = s;
-                    break;
-
-                case "progress":
-                    progress?.Report(Snapshot(stage, frame, total, started.Elapsed, speed));
-                    break;
-            }
-        }
-
-        await process.WaitForExitAsync(CancellationToken.None);
-        await stderr;
-
-        ct.ThrowIfCancellationRequested();
-
-        if (process.ExitCode != 0)
-        {
-            var message = errors.ToString().Trim();
-            if (message.Length > 300) message = message[..300] + "…";
-            throw new InvalidOperationException(
-                string.IsNullOrEmpty(message) ? $"ffmpeg завершился с кодом {process.ExitCode}" : message);
-        }
-
-        progress?.Report(new BuildProgress(stage, 100, total, total, TimeSpan.Zero, speed));
-    }
-
-    private static BuildProgress Snapshot(BuildStage stage, long frame, long total, TimeSpan elapsed, double speed)
-    {
-        var percent = total > 0 ? Math.Clamp(frame * 100.0 / total, 0, 100) : 0;
-
-        // Оценка по фактической скорости с начала этапа: у ffmpeg скорость почти
-        // постоянна, а мгновенная (speed) слишком дёргается на первых секундах.
-        var eta = TimeSpan.Zero;
-        if (frame > 0 && total > frame && elapsed > TimeSpan.Zero)
-        {
-            var perFrame = elapsed.TotalSeconds / frame;
-            eta = TimeSpan.FromSeconds(perFrame * (total - frame));
-        }
-
-        return new BuildProgress(stage, percent, frame, total, eta, speed);
-    }
+    private static Task RunAsync(
+        string args, long total, BuildStage stage, IProgress<BuildProgress>? progress, CancellationToken ct) =>
+        FFmpegRun.RunAsync(
+            args, total,
+            progress is null
+                ? null
+                : p => progress.Report(new BuildProgress(stage, p.Percent, p.Frame, p.Total, p.Eta, p.Speed)),
+            ct);
 
     private static void SafeDelete(string path)
     {
