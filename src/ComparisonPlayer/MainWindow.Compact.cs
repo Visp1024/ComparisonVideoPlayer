@@ -1,4 +1,5 @@
 using System.Windows;
+using ComparisonPlayer.Localization;
 using ComparisonPlayer.Tracks;
 
 namespace ComparisonPlayer;
@@ -41,7 +42,7 @@ public partial class MainWindow
     {
         _compact = !_compact;
         ApplyCompact();
-        Status(_compact ? "таймлайн свёрнут до полосы (Ctrl+T)" : "таймлайн развёрнут (Ctrl+T)");
+        Status(Loc.Str(_compact ? "Status.CompactOn" : "Status.CompactOff"));
     }
 
     /// <summary>

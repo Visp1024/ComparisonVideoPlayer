@@ -2,6 +2,7 @@
                   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                   xmlns:chrome="clr-namespace:ComparisonPlayer.Chrome"
+                  xmlns:loc="clr-namespace:ComparisonPlayer.Localization"
                   Icon="/app.ico" Width="440" SizeToContent="Height"
                   MinHeight="150" ResizeMode="NoResize" ShowInTaskbar="False"
                   WindowStartupLocation="CenterOwner"
@@ -30,7 +31,7 @@
         <Border Grid.Row="2" Background="{StaticResource Panel2Brush}"
                 BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0" Padding="18,10">
             <Button Style="{StaticResource PrimaryButton}" Margin="0" HorizontalAlignment="Right"
-                    Content="Понятно" Click="Ok_Click" IsDefault="True" IsCancel="True" />
+                    Content="{loc:Str Dialog.Ok}" Click="Ok_Click" IsDefault="True" IsCancel="True" />
         </Border>
     </Grid>
 </chrome:AppWindow>

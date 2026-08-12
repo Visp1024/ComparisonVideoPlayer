@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer;
 
@@ -53,7 +54,7 @@ public static class FFmpegRun
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"не удалось запустить ffmpeg ({AppEnv.FFmpegExe}): {ex.Message}", ex);
+            throw new InvalidOperationException(Loc.Str("FFmpeg.StartFailed", AppEnv.FFmpegExe, ex.Message), ex);
         }
 
         // Отмена = снять процесс: ffmpeg не умеет мягко прерываться без консоли.
@@ -110,7 +111,7 @@ public static class FFmpegRun
             var message = errors.ToString().Trim();
             if (message.Length > 300) message = message[..300] + "…";
             throw new InvalidOperationException(
-                string.IsNullOrEmpty(message) ? $"ffmpeg завершился с кодом {process.ExitCode}" : message);
+                string.IsNullOrEmpty(message) ? Loc.Str("FFmpeg.ExitCode", process.ExitCode) : message);
         }
 
         progress?.Invoke(new FFmpegProgress(100, total, total, TimeSpan.Zero, speed));

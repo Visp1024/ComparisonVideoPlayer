@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Windows;
 using System.Windows.Input;
 using ComparisonPlayer.Chrome;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer;
 
@@ -25,8 +26,8 @@ public partial class FFmpegSetupWindow : AppWindow
     {
         InitializeComponent();
         TxtTarget.Text = FFmpegInstaller.TargetDir;
-        BtnInstall.Content = $"Скачать (~{FFmpegInstaller.ApproxDownloadMb} МБ)";
-        TxtStatus.Text = "Загрузка идёт один раз: дальше плеер берёт библиотеки из этого каталога.";
+        BtnInstall.Content = Loc.Str("Setup.Download", FFmpegInstaller.ApproxDownloadMb);
+        TxtStatus.Text = Loc.Str("Setup.Once");
     }
 
     private bool Busy => _cancel is not null;
@@ -37,10 +38,10 @@ public partial class FFmpegSetupWindow : AppWindow
 
         _cancel = new CancellationTokenSource();
         BtnInstall.IsEnabled = false;
-        BtnCancel.Content = "Отмена";
+        BtnCancel.Content = Loc.Str("Setup.Cancel");
         Bar.Visibility = Visibility.Visible;
         Bar.Value = 0;
-        TxtStatus.Text = "Соединение…";
+        TxtStatus.Text = Loc.Str("Setup.Connecting");
 
         // Progress<T> отдаёт отчёты в поток, где создан, — здесь это поток окна,
         // поэтому обращаться к элементам напрямую можно без Dispatcher.
@@ -55,13 +56,13 @@ public partial class FFmpegSetupWindow : AppWindow
         }
         catch (OperationCanceledException)
         {
-            TxtStatus.Text = "Загрузка отменена.";
+            TxtStatus.Text = Loc.Str("Setup.Cancelled");
         }
         catch (HttpRequestException ex)
         {
             // Сеть — самая частая причина отказа, и звучать она должна отдельно от
             // «архив битый»: пользователю нужно понять, чинить ли ему интернет.
-            Fail($"Не удалось скачать: {ex.Message}");
+            Fail(Loc.Str("Setup.Failed", ex.Message));
         }
         catch (Exception ex)
         {
@@ -73,8 +74,8 @@ public partial class FFmpegSetupWindow : AppWindow
 
         Bar.Visibility = Visibility.Collapsed;
         BtnInstall.IsEnabled = true;
-        BtnInstall.Content = "Повторить";
-        BtnCancel.Content = "Не сейчас";
+        BtnInstall.Content = Loc.Str("Setup.Retry");
+        BtnCancel.Content = Loc.Str("Setup.NotNow");
     }
 
     private void Report(FFmpegInstallProgress p)
@@ -82,7 +83,7 @@ public partial class FFmpegSetupWindow : AppWindow
         if (p.Stage == FFmpegInstallStage.Extract)
         {
             Bar.Value = p.Total > 0 ? 100.0 * p.Done / p.Total : 0;
-            TxtStatus.Text = $"Распаковка: {p.Done} из {p.Total}";
+            TxtStatus.Text = Loc.Str("Setup.Extracting", p.Done, p.Total);
             return;
         }
 
@@ -90,19 +91,19 @@ public partial class FFmpegSetupWindow : AppWindow
         if (p.Total > 0)
         {
             Bar.Value = 100.0 * p.Done / p.Total;
-            TxtStatus.Text = $"Загрузка: {p.Done / mb:0.0} из {p.Total / mb:0.0} МБ";
+            TxtStatus.Text = Loc.Str("Setup.Downloading", $"{p.Done / mb:0.0}", $"{p.Total / mb:0.0}");
         }
         else
         {
             // Сервер не назвал размер — доли нет, показываем хотя бы счётчик мегабайт.
             Bar.Value = 0;
-            TxtStatus.Text = $"Загрузка: {p.Done / mb:0.0} МБ";
+            TxtStatus.Text = Loc.Str("Setup.DownloadingUnknown", $"{p.Done / mb:0.0}");
         }
     }
 
     private void Fail(string message)
     {
-        TxtStatus.Text = message + "\nМожно повторить или положить библиотеки в каталог вручную.";
+        TxtStatus.Text = Loc.Str("Setup.FailTail", message);
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)

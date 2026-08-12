@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer.Remote;
 
@@ -45,7 +46,7 @@ public sealed record RemoteCommand(RemoteCommandKind Kind, bool Flag)
         command = null;
         error = null;
 
-        if (string.IsNullOrWhiteSpace(line)) { error = "пустая строка"; return false; }
+        if (string.IsNullOrWhiteSpace(line)) { error = Loc.Str("Remote.ErrEmptyLine"); return false; }
 
         try
         {
@@ -54,13 +55,13 @@ public sealed record RemoteCommand(RemoteCommandKind Kind, bool Flag)
 
             if (root.ValueKind != JsonValueKind.Object)
             {
-                error = "ожидался объект JSON";
+                error = Loc.Str("Remote.ErrNotObject");
                 return false;
             }
 
             if (!root.TryGetProperty("cmd", out var cmd) || cmd.ValueKind != JsonValueKind.String)
             {
-                error = "нет поля cmd";
+                error = Loc.Str("Remote.ErrNoCmd");
                 return false;
             }
 
@@ -78,12 +79,12 @@ public sealed record RemoteCommand(RemoteCommandKind Kind, bool Flag)
                 // Step в редакторе Unity, откуда команда чаще всего и приходит.
                 case "step": command = new RemoteCommand(RemoteCommandKind.Step, Bool(root, "forward", true)); return true;
                 case "loop": command = new RemoteCommand(RemoteCommandKind.Loop, Bool(root, "on", true)); return true;
-                default: error = $"неизвестная команда «{name}»"; return false;
+                default: error = Loc.Str("Remote.ErrUnknownCommand", name); return false;
             }
         }
         catch (JsonException)
         {
-            error = "строка не разбирается как JSON";
+            error = Loc.Str("Remote.ErrNotJson");
             return false;
         }
     }
@@ -96,12 +97,12 @@ public sealed record RemoteCommand(RemoteCommandKind Kind, bool Flag)
     /// <summary>Строка для журнала в модалке — её читает человек, а не программа.</summary>
     public string Describe() => Kind switch
     {
-        RemoteCommandKind.Play => Flag ? "play с начала отрезка" : "play с текущей позиции",
+        RemoteCommandKind.Play => Loc.Str(Flag ? "Remote.CmdPlayFromStart" : "Remote.CmdPlayFromHere"),
         RemoteCommandKind.Pause => "pause",
         RemoteCommandKind.Stop => "stop",
         RemoteCommandKind.Rewind => "rewind",
-        RemoteCommandKind.Step => Flag ? "step вперёд" : "step назад",
-        RemoteCommandKind.Loop => Flag ? "loop включена" : "loop выключена",
+        RemoteCommandKind.Step => Loc.Str(Flag ? "Remote.CmdStepForward" : "Remote.CmdStepBack"),
+        RemoteCommandKind.Loop => Loc.Str(Flag ? "Remote.CmdLoopOn" : "Remote.CmdLoopOff"),
         _ => Kind.ToString()
     };
 }

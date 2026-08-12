@@ -60,6 +60,13 @@ public enum VideoScaleMode
 /// </summary>
 public sealed class Settings
 {
+    /// <summary>
+    /// Язык интерфейса кодом словаря («en», «ru»); пустая строка — язык Windows.
+    /// По умолчанию системный: плеер должен заговорить на языке машины сам, без похода
+    /// в настройки, а осознанный выбор всё равно переживёт перезапуск.
+    /// </summary>
+    public string Language { get; set; } = Localization.Loc.SystemLanguage;
+
     /// <summary>Показывать таймкод и номер кадра поверх изображения (клавиша T).</summary>
     public bool ShowOverlay { get; set; } = true;
 

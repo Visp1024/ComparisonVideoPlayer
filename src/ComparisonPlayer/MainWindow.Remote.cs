@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
+using ComparisonPlayer.Localization;
 using ComparisonPlayer.Remote;
 
 namespace ComparisonPlayer;
@@ -45,7 +46,7 @@ public partial class MainWindow
         UpdateRemoteButton();
 
         if (dialog.ResultEnabled && !App.Settings.RemoteEnabled)
-            Status($"Имя канала «{dialog.ResultPipeName}» занято другим процессом");
+            Status(Loc.Str("Status.PipeBusy", dialog.ResultPipeName));
     }
 
     /// <summary>
@@ -81,7 +82,7 @@ public partial class MainWindow
             // Имя занято другим плеером. Не падаем: причина уходит в журнал, который
             // пользователь видит в модалке, а тумблер откатывается — включённое
             // состояние без работающего канала врало бы.
-            _remoteLog.Add($"не удалось открыть канал «{pipeName}»: имя занято");
+            _remoteLog.Add(Loc.Str("Remote.LogPipeBusy", pipeName));
             server.Dispose();
             return false;
         }
@@ -97,7 +98,7 @@ public partial class MainWindow
     {
         if (!_sync.IsOpen)
         {
-            _remoteLog.Add("пропущено: файл не открыт");
+            _remoteLog.Add(Loc.Str("Remote.LogNoFile"));
             return;
         }
 

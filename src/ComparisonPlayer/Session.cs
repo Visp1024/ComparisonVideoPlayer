@@ -34,7 +34,8 @@ public sealed class Session
     /// <summary>Расширение и фильтр диалога для сессии, сохранённой отдельным файлом.</summary>
     public const string FileExtension = ".cvp.json";
 
-    public const string FileFilter = "Сессия CVP|*.cvp.json|Все файлы|*.*";
+    /// <summary>Свойством, а не константой: подписи фильтра приходят из словаря языка.</summary>
+    public static string FileFilter => Localization.Loc.Str("Session.Filter");
 
     public SessionTrack A { get; set; } = new();
     public SessionTrack B { get; set; } = new();

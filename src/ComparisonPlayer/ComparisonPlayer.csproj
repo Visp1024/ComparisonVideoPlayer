@@ -37,4 +37,14 @@
     <Resource Include="app.ico" />
   </ItemGroup>
 
+  <!-- Словари интерфейса (задача #22). Дважды: ресурсом в сборке — чтобы подписи были
+       даже у голого exe, и файлом рядом с программой — чтобы перевод можно было
+       поправить или добавить свой язык, не пересобирая проект. -->
+  <ItemGroup>
+    <None Remove="Strings\*.json" />
+    <EmbeddedResource Include="Strings\Strings.en.json" LogicalName="ComparisonPlayer.Strings.Strings.en.json" />
+    <EmbeddedResource Include="Strings\Strings.ru.json" LogicalName="ComparisonPlayer.Strings.Strings.ru.json" />
+    <Content Include="Strings\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

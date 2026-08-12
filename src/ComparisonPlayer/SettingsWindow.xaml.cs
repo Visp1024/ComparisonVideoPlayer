@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using ComparisonPlayer.Chrome;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer;
 
@@ -17,38 +18,19 @@ public partial class SettingsWindow : AppWindow
     /// <summary>Раздел со шпаргалкой по клавишам: на него открывается окно по F1.</summary>
     public const string KeysPage = "keys";
 
-    /// <summary>Шпаргалка по клавишам: она же справка, отдельного окна помощи нет.</summary>
-    private static readonly (string Keys, string What)[] Shortcuts =
+    /// <summary>
+    /// Шпаргалка по клавишам: она же справка, отдельного окна помощи нет. Здесь только
+    /// порядок строк — сами клавиши и их описания приходят из словаря языка: ключ
+    /// «Keys.X» — клавиши, «Keys.X.What» — что они делают.
+    /// </summary>
+    private static readonly string[] Shortcuts =
     [
-        ("Space", "воспроизведение / пауза"),
-        ("J / K / L", "шаттл: назад · стоп · вперёд (повтор — вдвое быстрее)"),
-        ("← / →", "шаг на кадр"),
-        ("Shift + ← / →", "крупный шаг"),
-        ("колесо над кадром", "медленно — по кадру, быстро — крупным шагом"),
-        ("Home / End", "начало / конец отрезка (с Shift — края шкалы)"),
-        ("I / O", "начало / конец отрезка на текущем кадре"),
-        ("Shift + I", "сбросить отрезок на весь ролик"),
-        ("Ctrl + L", "петля по отрезку"),
-        ("правая кнопка на клипе", "вырезать отрезок в отдельный файл"),
-        ("Alt + ← / →", "сдвиг трека B на кадр"),
-        ("Alt + 0", "сбросить сдвиг"),
-        ("Tab", "переключить активный трек"),
-        ("M", "сделать активный трек мастером (звук идёт за ним)"),
-        ("Ctrl + M", "включить или выключить звук"),
-        ("Ctrl + ↑ / ↓", "громкость"),
-        ("V", "рядом / только A / только B (вид без своего ролика пропускается)"),
-        ("F11", "во весь экран (выход — Esc); двойной клик по кадру — то же"),
-        ("Z", "кадр в области: вписать / заполнить / растянуть"),
-        ("T", "накладка над кадром"),
-        ("Ctrl + T", "свернуть таймлайн до полосы прогресса"),
-        ("S", "снэп к границам"),
-        ("F", "уместить всю шкалу"),
-        ("+ / −", "зум таймлайна"),
-        ("Ctrl + O", "открыть файл в трек A (с Shift — в B)"),
-        ("Ctrl + I", "панель сведений"),
-        ("C", "панель кэша кадров"),
-        ("Ctrl + S", "сохранить сессию в файл"),
-        ("F1", "это окно")
+        "Keys.Space", "Keys.Shuttle", "Keys.Step", "Keys.BigStep", "Keys.Wheel",
+        "Keys.HomeEnd", "Keys.InOut", "Keys.SegReset", "Keys.Loop", "Keys.Export",
+        "Keys.Offset", "Keys.OffsetReset", "Keys.Tab", "Keys.Master", "Keys.Mute",
+        "Keys.Volume", "Keys.Layout", "Keys.Fullscreen", "Keys.Scale", "Keys.Overlay",
+        "Keys.Compact", "Keys.Snap", "Keys.Fit", "Keys.Zoom", "Keys.Open",
+        "Keys.Info", "Keys.Cache", "Keys.SessionSave", "Keys.Help"
     ];
 
     /// <summary>Правленая копия; забирать её имеет смысл только при <c>DialogResult == true</c>.</summary>
@@ -63,6 +45,7 @@ public partial class SettingsWindow : AppWindow
         InitializeComponent();
 
         Result = current.Clone();
+        FillLanguages();
         ShowValues(Result);
         FillShortcuts();
 
@@ -74,14 +57,49 @@ public partial class SettingsWindow : AppWindow
         PathData.ToolTip = AppEnv.DataDir;
         PathCache.Text = AppEnv.CacheDir;
         PathCache.ToolTip = AppEnv.CacheDir;
-        PathFFmpeg.Text = string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "не найден" : AppEnv.FFmpegDir;
+        PathFFmpeg.Text = string.IsNullOrEmpty(AppEnv.FFmpegDir) ? Loc.Str("Settings.PathNotFound") : AppEnv.FFmpegDir;
         PathFFmpeg.ToolTip = PathFFmpeg.Text;
     }
+
+    // ---------- язык ----------
+
+    /// <summary>
+    /// Фишки языков: «как в системе» плюс всё, на что нашёлся словарь. Собираем кодом —
+    /// список зависит от файлов рядом с программой, а не от разметки.
+    /// </summary>
+    private void FillLanguages()
+    {
+        AddChip(Loc.SystemLanguage, Loc.Str("Settings.LanguageSystem"));
+
+        foreach (var language in Loc.Available)
+            AddChip(language.Code, language.Name);
+
+        void AddChip(string code, string title) =>
+            LanguageChips.Children.Add(new RadioButton
+            {
+                Style = (Style)FindResource("ChipToggle"),
+                GroupName = "Language",
+                Tag = code,
+                Content = title
+            });
+    }
+
+    /// <summary>Выбранный код языка; пустая строка — «как в системе».</summary>
+    private string SelectedLanguage =>
+        LanguageChips.Children.OfType<RadioButton>().FirstOrDefault(x => x.IsChecked == true)?.Tag as string
+        ?? Loc.SystemLanguage;
 
     // ---------- настройки ↔ элементы ----------
 
     private void ShowValues(Settings s)
     {
+        var language = LanguageChips.Children.OfType<RadioButton>()
+            .FirstOrDefault(x => string.Equals((string?)x.Tag, s.Language, StringComparison.OrdinalIgnoreCase));
+
+        // Языка из настроек может уже не быть (файл словаря убрали) — тогда выбранной
+        // остаётся системная фишка, и «Сохранить» честно запишет именно её.
+        (language ?? LanguageChips.Children.OfType<RadioButton>().First()).IsChecked = true;
+
         ChkRestore.IsChecked = s.RestoreSession;
         ChkOverlay.IsChecked = s.ShowOverlay;
         ChkSnap.IsChecked = s.SnapToFrames;
@@ -118,6 +136,7 @@ public partial class SettingsWindow : AppWindow
     /// <summary>Прочитать элементы в копию настроек. Непонятное значение оставляет прежнее.</summary>
     private void Collect(Settings s)
     {
+        s.Language = SelectedLanguage;
         s.RestoreSession = ChkRestore.IsChecked == true;
         s.ShowOverlay = ChkOverlay.IsChecked == true;
         s.SnapToFrames = ChkSnap.IsChecked == true;
@@ -210,20 +229,20 @@ public partial class SettingsWindow : AppWindow
     {
         var scope = FileAssociations.Scope;
 
-        AssocState.Text = scope switch
+        AssocState.Text = Loc.Str(scope switch
         {
-            AssociationScope.User => "CVP зарегистрирован для видеофайлов у этого пользователя.",
-            AssociationScope.Machine =>
-                "CVP зарегистрирован установщиком для всех пользователей компьютера. " +
-                "Снять такую регистрацию можно удалением программы.",
-            _ => "CVP не зарегистрирован: в меню «Открыть с помощью» его нет."
-        };
+            AssociationScope.User => "Settings.AssocUser",
+            AssociationScope.Machine => "Settings.AssocMachine",
+            _ => "Settings.AssocNone"
+        });
 
         // Машинную запись обычным процессом не снять — прав не хватит, и кнопка бы только обманывала.
-        BtnAssocRegister.Content = scope == AssociationScope.User ? "Убрать регистрацию" : "Зарегистрировать CVP";
+        BtnAssocRegister.Content = Loc.Str(scope == AssociationScope.User
+            ? "Settings.AssocUnregister"
+            : "Settings.AssocRegister");
         BtnAssocRegister.IsEnabled = scope != AssociationScope.Machine;
 
-        AssocExtensions.Text = "Расширения: " + string.Join(", ", FileAssociations.VideoExtensions);
+        AssocExtensions.Text = Loc.Str("Settings.AssocExtensions", string.Join(", ", FileAssociations.VideoExtensions));
     }
 
     private void AssocRegister_Click(object sender, RoutedEventArgs e)
@@ -237,8 +256,10 @@ public partial class SettingsWindow : AppWindow
         }
         catch (Exception ex)
         {
-            MessageDialog.Show(this, "Типы файлов",
-                $"Не удалось {(registered ? "снять регистрацию" : "зарегистрировать")} типы файлов.\n\n{ex.Message}");
+            MessageDialog.Show(this, Loc.Str("Settings.AssocHeaderPlain"),
+                Loc.Str("Settings.AssocFailed",
+                    Loc.Str(registered ? "Settings.AssocFailedUnregister" : "Settings.AssocFailedRegister"),
+                    ex.Message));
         }
 
         ShowAssociations();
@@ -252,8 +273,8 @@ public partial class SettingsWindow : AppWindow
         }
         catch (Exception ex)
         {
-            MessageDialog.Show(this, "Типы файлов",
-                $"Не открылось окно «Приложения по умолчанию».\n\n{ex.Message}");
+            MessageDialog.Show(this, Loc.Str("Settings.AssocHeaderPlain"),
+                Loc.Str("Settings.AssocDefaultsFailed", ex.Message));
         }
     }
 
@@ -269,14 +290,12 @@ public partial class SettingsWindow : AppWindow
         {
             KeyGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            var (keys, what) = Shortcuts[i];
-
-            var key = new TextBlock { Text = keys, Style = (Style)FindResource("KeyCell") };
+            var key = new TextBlock { Text = Loc.Str(Shortcuts[i]), Style = (Style)FindResource("KeyCell") };
             Grid.SetRow(key, i);
             Grid.SetColumn(key, 0);
             KeyGrid.Children.Add(key);
 
-            var text = new TextBlock { Text = what, Style = (Style)FindResource("KeyText") };
+            var text = new TextBlock { Text = Loc.Str(Shortcuts[i] + ".What"), Style = (Style)FindResource("KeyText") };
             Grid.SetRow(text, i);
             Grid.SetColumn(text, 1);
             KeyGrid.Children.Add(text);
@@ -287,9 +306,9 @@ public partial class SettingsWindow : AppWindow
 
     private void Defaults_Click(object sender, RoutedEventArgs e)
     {
-        // Каталог последнего открытия — не настройка, а память интерфейса: его сброс
-        // только раздражал бы, поэтому переносим в чистые значения.
-        var defaults = new Settings { LastFolder = Result.LastFolder };
+        // Каталог последнего открытия и язык — не настройки, а память интерфейса: их
+        // сброс только раздражал бы, поэтому переносим в чистые значения.
+        var defaults = new Settings { LastFolder = Result.LastFolder, Language = SelectedLanguage };
         ShowValues(defaults);
     }
 
@@ -314,8 +333,8 @@ public partial class SettingsWindow : AppWindow
 
         if (string.IsNullOrEmpty(path))
         {
-            MessageDialog.Show(this, "Настройки", "Каталог FFmpeg не найден.",
-                "COMPARISONPLAYER_FFMPEG_DIR либо подкаталог FFmpeg рядом с программой");
+            MessageDialog.Show(this, Loc.Str("Settings.Caption"), Loc.Str("Settings.FFmpegNotFound"),
+                Loc.Str("Settings.FFmpegNotFoundDetail"));
             return;
         }
 
@@ -326,7 +345,7 @@ public partial class SettingsWindow : AppWindow
         }
         catch (Exception ex)
         {
-            MessageDialog.Show(this, "Настройки", $"Не открылся каталог.\n\n{ex.Message}", path);
+            MessageDialog.Show(this, Loc.Str("Settings.Caption"), Loc.Str("Settings.FolderFailed", ex.Message), path);
         }
     }
 }

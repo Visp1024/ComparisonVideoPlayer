@@ -1,6 +1,7 @@
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer.Remote;
 
@@ -55,7 +56,7 @@ public sealed class PipeServer : IDisposable
         for (var i = 1; i < MaxClients; i++)
             _ = Task.Run(() => AcceptLoop(null, token), token);
 
-        _log.Add($"канал \\\\.\\pipe\\{_pipeName} открыт");
+        _log.Add(Loc.Str("Remote.LogPipeOpen", _pipeName));
     }
 
     public void Stop()
@@ -68,7 +69,7 @@ public sealed class PipeServer : IDisposable
 
         lock (_gate) _clients = 0;
         ClientsChanged?.Invoke(this, EventArgs.Empty);
-        _log.Add("канал закрыт");
+        _log.Add(Loc.Str("Remote.LogPipeClosed"));
     }
 
     public void Dispose() => Stop();
@@ -96,7 +97,7 @@ public sealed class PipeServer : IDisposable
 
                 counted = true;
                 Changed(+1);
-                _log.Add("клиент подключился");
+                _log.Add(Loc.Str("Remote.LogClientConnected"));
 
                 await ReadLines(stream, token).ConfigureAwait(false);
             }
@@ -115,7 +116,7 @@ public sealed class PipeServer : IDisposable
                 if (counted)
                 {
                     Changed(-1);
-                    _log.Add("клиент отключился");
+                    _log.Add(Loc.Str("Remote.LogClientLeft"));
                 }
 
                 await stream.DisposeAsync().ConfigureAwait(false);
@@ -175,7 +176,7 @@ public sealed class PipeServer : IDisposable
         }
         else
         {
-            _log.Add($"отказ: {error}");
+            _log.Add(Loc.Str("Remote.LogRejected", error));
         }
     }
 

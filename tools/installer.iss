@@ -59,6 +59,13 @@ russian.AssocTask=Зарегистрировать CVP для видеофайл
 english.AssocGroup=File types:
 english.AssocTask=Register CVP for video files (adds it to "Open with")
 
+; Эти две строки видны в проводнике и в «Приложениях по умолчанию», а значит тоже
+; переводятся (задача #22). Те же тексты пишет сам плеер — FileAssociations.cs.
+russian.ProgIdName=Видео CVP
+russian.AppDescription=Покадровое сравнение двух видео
+english.ProgIdName=CVP video
+english.AppDescription=Frame-by-frame comparison of two videos
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 ; Регистрация не отбирает у пользователя текущий плеер по умолчанию — только добавляет
@@ -79,8 +86,8 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 ; инсталлятор себя не назначает: с Windows 10 такой выбор делается только пользователем в
 ; системном окне, а запись мимо него система отбрасывает. Здесь — регистрация типа файла и
 ; список возможностей, по которому CVP виден в «Приложениях по умолчанию».
-Root: HKA; Subkey: "Software\Classes\{#ProgId}"; ValueType: string; ValueData: "Видео CVP"; Flags: uninsdeletekey; Tasks: fileassoc
-Root: HKA; Subkey: "Software\Classes\{#ProgId}"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "Видео CVP"; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\{#ProgId}"; ValueType: string; ValueData: "{cm:ProgIdName}"; Flags: uninsdeletekey; Tasks: fileassoc
+Root: HKA; Subkey: "Software\Classes\{#ProgId}"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "{cm:ProgIdName}"; Tasks: fileassoc
 Root: HKA; Subkey: "Software\Classes\{#ProgId}\DefaultIcon"; ValueType: string; ValueData: "{app}\{#AppExe},0"; Tasks: fileassoc
 Root: HKA; Subkey: "Software\Classes\{#ProgId}\shell\open\command"; ValueType: string; ValueData: """{app}\{#AppExe}"" ""%1"""; Tasks: fileassoc
 
@@ -100,7 +107,7 @@ Root: HKA; Subkey: "Software\Classes\.mpeg\OpenWithProgIds"; ValueType: string; 
 ; Возможности приложения: без них окно «Приложения по умолчанию» CVP не покажет —
 ; его список строится по RegisteredApplications.
 Root: HKA; Subkey: "Software\{#AppName}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#AppName}"; Flags: uninsdeletekey; Tasks: fileassoc
-Root: HKA; Subkey: "Software\{#AppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "Покадровое сравнение двух видео"; Tasks: fileassoc
+Root: HKA; Subkey: "Software\{#AppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "{cm:AppDescription}"; Tasks: fileassoc
 Root: HKA; Subkey: "Software\{#AppName}\Capabilities"; ValueType: string; ValueName: "ApplicationIcon"; ValueData: "{app}\{#AppExe},0"; Tasks: fileassoc
 Root: HKA; Subkey: "Software\{#AppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".mp4";  ValueData: "{#ProgId}"; Tasks: fileassoc
 Root: HKA; Subkey: "Software\{#AppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".mkv";  ValueData: "{#ProgId}"; Tasks: fileassoc

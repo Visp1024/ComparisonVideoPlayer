@@ -1,5 +1,6 @@
 using System.IO;
 using ComparisonPlayer.Cache;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer.Playback;
 
@@ -65,10 +66,10 @@ public sealed class FrameCacheBackend(FlyleafBackend inner, CacheEntry entry) : 
     public OpenResult Open(string path)
     {
         if (!string.Equals(path, entry.SourcePath, StringComparison.OrdinalIgnoreCase))
-            return OpenResult.Fail("кэш собран для другого файла");
+            return OpenResult.Fail(Loc.Str("Cache.NotForFile"));
 
         if (!File.Exists(entry.ProxyPath))
-            return OpenResult.Fail("файл кэша пропал");
+            return OpenResult.Fail(Loc.Str("Cache.FileGone"));
 
         var res = inner.Open(entry.ProxyPath);
         if (!res.Success) return res;

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using ComparisonPlayer.Localization;
 using ComparisonPlayer.Tracks;
 using Microsoft.Win32;
 
@@ -66,7 +67,7 @@ public partial class MainWindow
             if (!File.Exists(saved.File))
             {
                 missing.Add($"{track.Letter}: {Path.GetFileName(saved.File)}");
-                ShowOpenError(track, saved.File, "файла больше нет по прежнему пути");
+                ShowOpenError(track, saved.File, Loc.Str("Session.FileMissing"));
                 continue;
             }
 
@@ -77,8 +78,8 @@ public partial class MainWindow
         if (opened == 0)
         {
             Status(missing.Count > 0
-                ? $"{what} не восстановлена: не открылось ни одного файла ({string.Join(", ", missing)})"
-                : $"{what} пуста — открывать нечего");
+                ? Loc.Str("Session.NothingOpened", what, string.Join(", ", missing))
+                : Loc.Str("Session.Empty", what));
             return;
         }
 
@@ -105,8 +106,8 @@ public partial class MainWindow
 
         var files = string.Join(" · ", _sync.OpenTracks.Select(t => $"{t.Letter}: {t.Media!.FileName}"));
         Status(missing.Count == 0
-            ? $"{what} восстановлена — {files}"
-            : $"{what} восстановлена частично — {files}; не найдено: {string.Join(", ", missing)}");
+            ? Loc.Str("Session.Restored", what, files)
+            : Loc.Str("Session.RestoredPartly", what, files, string.Join(", ", missing)));
     }
 
     /// <summary>
@@ -117,7 +118,7 @@ public partial class MainWindow
     {
         if (StartupSession() is not { } session) return;
 
-        ApplySession(session, "прошлая сессия");
+        ApplySession(session, Loc.Str("Session.Previous"));
     }
 
     /// <summary>Прочитанная сессия и признак того, что читать её уже пробовали.</summary>
@@ -162,24 +163,24 @@ public partial class MainWindow
     {
         if (Session.Load(AppEnv.SessionFile) is not { HasFiles: true } session)
         {
-            Status("последняя сессия не сохранена — восстанавливать нечего");
+            Status(Loc.Str("Session.NoLast"));
             return;
         }
 
-        ApplySession(session, "последняя сессия");
+        ApplySession(session, Loc.Str("Session.Last"));
     }
 
     private void SaveSessionAs()
     {
         if (!_sync.OpenTracks.Any())
         {
-            Status("сохранять нечего: не открыт ни один трек");
+            Status(Loc.Str("Session.NothingToSave"));
             return;
         }
 
         var dlg = new SaveFileDialog
         {
-            Title = "Сохранить сессию",
+            Title = Loc.Str("Session.SaveDialog"),
             Filter = Session.FileFilter,
             DefaultExt = Session.FileExtension,
             FileName = SuggestedSessionName(),
@@ -191,12 +192,12 @@ public partial class MainWindow
         var error = CaptureSession().Save(dlg.FileName);
         if (error.Length > 0)
         {
-            Status($"сессия не сохранена: {error}");
+            Status(Loc.Str("Session.SaveFailed", error));
             return;
         }
 
         _sessionPath = dlg.FileName;
-        Status($"сессия сохранена: {Path.GetFileName(dlg.FileName)}");
+        Status(Loc.Str("Session.Saved", Path.GetFileName(dlg.FileName)));
         UpdateState();
     }
 
@@ -204,7 +205,7 @@ public partial class MainWindow
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Открыть сессию",
+            Title = Loc.Str("Session.OpenDialog"),
             Filter = Session.FileFilter,
             InitialDirectory = Directory.Exists(App.Settings.LastFolder) ? App.Settings.LastFolder : null
         };
@@ -213,12 +214,12 @@ public partial class MainWindow
 
         if (Session.Load(dlg.FileName) is not { } session)
         {
-            Status($"не прочитать сессию {Path.GetFileName(dlg.FileName)} — файл повреждён или это не сессия");
+            Status(Loc.Str("Session.Unreadable", Path.GetFileName(dlg.FileName)));
             return;
         }
 
         _sessionPath = dlg.FileName;
-        ApplySession(session, $"сессия «{Path.GetFileNameWithoutExtension(dlg.FileName)}»");
+        ApplySession(session, Loc.Str("Session.Title", Path.GetFileNameWithoutExtension(dlg.FileName)));
         UpdateState();
     }
 

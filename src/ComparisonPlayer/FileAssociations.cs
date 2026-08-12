@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using ComparisonPlayer.Localization;
 using Microsoft.Win32;
 
 namespace ComparisonPlayer;
@@ -88,12 +89,12 @@ public static class FileAssociations
     public static void Register()
     {
         var exe = ExePath;
-        if (exe.Length == 0) throw new InvalidOperationException("не удалось определить путь к программе");
+        if (exe.Length == 0) throw new InvalidOperationException(Loc.Str("Assoc.ExeUnknown"));
 
         using (var progId = Registry.CurrentUser.CreateSubKey($@"{ClassesKey}\{ProgId}"))
         {
-            progId.SetValue(null, "Видео CVP");
-            progId.SetValue("FriendlyTypeName", "Видео CVP");
+            progId.SetValue(null, Loc.Str("Assoc.ProgIdName"));
+            progId.SetValue("FriendlyTypeName", Loc.Str("Assoc.ProgIdName"));
 
             using (var icon = progId.CreateSubKey("DefaultIcon"))
                 icon.SetValue(null, $"\"{exe}\",0");
@@ -113,7 +114,7 @@ public static class FileAssociations
         using (var capabilities = Registry.CurrentUser.CreateSubKey(CapabilitiesKey))
         {
             capabilities.SetValue("ApplicationName", AppName);
-            capabilities.SetValue("ApplicationDescription", "Покадровое сравнение двух видео");
+            capabilities.SetValue("ApplicationDescription", Loc.Str("Assoc.AppDescription"));
             capabilities.SetValue("ApplicationIcon", $"\"{exe}\",0");
 
             using var associations = capabilities.CreateSubKey("FileAssociations");

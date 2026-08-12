@@ -1,4 +1,5 @@
 using System.Windows;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer;
 
@@ -47,12 +48,12 @@ public partial class MainWindow
         App.Settings.VideoScale = mode;
 
         ApplyScale();
-        Status(mode switch
+        Status(Loc.Str(mode switch
         {
-            VideoScaleMode.Fill => "кадр заполняет область: края срезаны (Z)",
-            VideoScaleMode.Stretch => "кадр растянут по области: пропорции не сохранены (Z)",
-            _ => "кадр вписан целиком: пропорции сохранены (Z)"
-        });
+            VideoScaleMode.Fill => "Status.ScaleFill",
+            VideoScaleMode.Stretch => "Status.ScaleStretch",
+            _ => "Status.ScaleFit"
+        }));
     }
 
     /// <summary>
@@ -81,14 +82,14 @@ public partial class MainWindow
             _ => "IcoScaleFit"
         });
 
-        var tip = $"Кадр в области: {ScaleName(_scale).ToLowerInvariant()} — переключить (Z)";
+        var tip = Loc.Str("Toolbar.ScaleTipCurrent", ScaleName(_scale).ToLowerInvariant());
         BtnScale.ToolTip = FsScale.ToolTip = tip;
     }
 
-    private static string ScaleName(VideoScaleMode mode) => mode switch
+    private static string ScaleName(VideoScaleMode mode) => Loc.Str(mode switch
     {
-        VideoScaleMode.Fill => "Заполнить",
-        VideoScaleMode.Stretch => "Растянуть",
-        _ => "Вписать"
-    };
+        VideoScaleMode.Fill => "Scale.Fill",
+        VideoScaleMode.Stretch => "Scale.Stretch",
+        _ => "Scale.Fit"
+    });
 }

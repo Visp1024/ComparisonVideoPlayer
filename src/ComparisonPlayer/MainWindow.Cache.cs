@@ -8,6 +8,7 @@ using System.Windows.Media.Imaging;
 using Shape = System.Windows.Shapes.Shape;
 using System.Windows.Threading;
 using ComparisonPlayer.Cache;
+using ComparisonPlayer.Localization;
 using ComparisonPlayer.Playback;
 using ComparisonPlayer.Tracks;
 
@@ -73,7 +74,7 @@ public partial class MainWindow
 
         _syncingCacheUi = false;
 
-        RbAutoHint.Text = $"строить, если шаг назад медленнее {App.Settings.StepBackThresholdMs} мс";
+        RbAutoHint.Text = Loc.Str("Cache.AutoHint", App.Settings.StepBackThresholdMs);
 
         UpdateModeBadges();
         UpdateCachePanel();
@@ -104,7 +105,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            Status($"{track.Letter}: кэш недоступен, не прочитать файл ({ex.Message})");
+            Status(Loc.Str("Status.CacheUnavailable", track.Letter, ex.Message));
             return;
         }
 
@@ -121,7 +122,7 @@ public partial class MainWindow
         if (_cacheStore.Find(track.CacheKey) is { } ready)
         {
             var built = ready.CreatedUtc.ToLocalTime().ToString("dd.MM HH:mm");
-            UseCacheBackend(track, ready, $"{track.Letter}: кэш от {built} переиспользован — сборка не нужна");
+            UseCacheBackend(track, ready, Loc.Str("Status.CacheReused", track.Letter, built));
             return;
         }
 
@@ -129,7 +130,7 @@ public partial class MainWindow
         {
             if (StepSpeedProbe.IsAllIntra(media))
             {
-                Status($"{track.Letter}: {media.Codec} — каждый кадр ключевой, кэш не нужен");
+                Status(Loc.Str("Status.CacheAllIntra", track.Letter, media.Codec));
                 UpdateModeBadges();
                 return;
             }
@@ -140,13 +141,13 @@ public partial class MainWindow
 
             if (track.SourceStepMs <= App.Settings.StepBackThresholdMs)
             {
-                Status($"{track.Letter}: шаг назад {track.SourceStepMs:F0} мс — кэш не нужен " +
-                       $"(порог {App.Settings.StepBackThresholdMs} мс)");
+                Status(Loc.Str("Status.CacheNotNeeded", track.Letter, $"{track.SourceStepMs:F0}",
+                    App.Settings.StepBackThresholdMs));
                 return;
             }
 
-            Status($"{track.Letter}: шаг назад {track.SourceStepMs:F0} мс — строю кэш кадров " +
-                   $"(порог {App.Settings.StepBackThresholdMs} мс)");
+            Status(Loc.Str("Status.CacheBuilding", track.Letter, $"{track.SourceStepMs:F0}",
+                App.Settings.StepBackThresholdMs));
         }
 
         StartBuild(track, media);
@@ -159,7 +160,7 @@ public partial class MainWindow
     /// </summary>
     private double MeasureSourceStep(PlayerTrack track, MediaInfo media)
     {
-        Status($"{track.Letter}: замеряю скорость шага назад…");
+        Status(Loc.Str("Status.CacheProbing", track.Letter));
         Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
 
         var ms = StepSpeedProbe.Measure(track.Backend, media);
@@ -175,7 +176,7 @@ public partial class MainWindow
 
         if (!File.Exists(AppEnv.FFmpegExe) && AppEnv.FFmpegExe != "ffmpeg")
         {
-            Status("ffmpeg не найден — кэш собрать нечем");
+            Status(Loc.Str("Status.CacheNoFFmpeg"));
             return;
         }
 
@@ -184,7 +185,7 @@ public partial class MainWindow
         if (_building is not null && !ReferenceEquals(_building, track))
         {
             _queued = track;
-            Status($"{track.Letter}: кэш соберётся после трека {_building.Letter}");
+            Status(Loc.Str("Status.CacheAfter", track.Letter, _building.Letter));
             UpdateModeBadges();
             return;
         }
@@ -216,9 +217,9 @@ public partial class MainWindow
         track.BuildEta = progress.Eta > TimeSpan.Zero ? Eta(progress.Eta) : "";
 
         BuildBadge(track).ToolTip =
-            $"{track.Letter}: {progress.Frame} / {progress.Total} кадров" +
-            (progress.Eta > TimeSpan.Zero ? $" · осталось ~{Eta(progress.Eta)}" : "") +
-            (progress.Speed > 0 ? $" · {progress.Speed:F2}× реального времени" : "");
+            Loc.Str("Status.CacheProgress", track.Letter, progress.Frame, progress.Total,
+                progress.Eta > TimeSpan.Zero ? Loc.Str("Status.CacheEta", Eta(progress.Eta)) : "",
+                progress.Speed > 0 ? Loc.Str("Status.CacheSpeed", $"{progress.Speed:F2}") : "");
 
         if (progress.Stage == BuildStage.Proxy)
         {
@@ -255,7 +256,7 @@ public partial class MainWindow
 
             // Воспроизведение обгоняет сборку — дальше кадров нет, играем с исходника.
             if (ExtendPartialCache(track, cache) <= local + PartialRefreshStep / 2)
-                PlayFromSource(track, $"{track.Letter}: воспроизведение обогнало сборку — играю с исходника");
+                PlayFromSource(track, Loc.Str("Status.CacheOutran", track.Letter));
 
             return;
         }
@@ -266,7 +267,7 @@ public partial class MainWindow
         var entry = PartialEntry(track);
         if (entry is null || !File.Exists(entry.ProxyPath)) return;
 
-        UseCacheBackend(track, entry, $"{track.Letter}: играю из собираемого кэша — готово {track.BuildPercent:F0} %");
+        UseCacheBackend(track, entry, Loc.Str("Status.CachePartial", track.Letter, $"{track.BuildPercent:F0}"));
     }
 
     /// <summary>
@@ -334,7 +335,7 @@ public partial class MainWindow
         {
             if (current)
             {
-                DropPartialCache(track, key, $"{track.Letter}: сборка кэша отменена — играю с исходника");
+                DropPartialCache(track, key, Loc.Str("Status.CacheCancelled", track.Letter));
                 UpdateModeBadges();
                 UpdateCachePanel();
             }
@@ -344,10 +345,10 @@ public partial class MainWindow
 
         if (task.IsFaulted)
         {
-            var message = task.Exception?.InnerException?.Message ?? "неизвестная ошибка";
+            var message = task.Exception?.InnerException?.Message ?? Loc.Str("Status.CacheUnknownError");
             if (current)
             {
-                DropPartialCache(track, key, $"{track.Letter}: кэш не собрался — {message}");
+                DropPartialCache(track, key, Loc.Str("Status.CacheFailed", track.Letter, message));
                 UpdateModeBadges();
                 UpdateCachePanel();
             }
@@ -361,9 +362,9 @@ public partial class MainWindow
 
             // Вытеснению не отдаём ни прокси, ни превью открытых сейчас файлов.
             var freed = _cacheStore.Trim(CacheLimitBytes, key, _a.ThumbKey, _b.ThumbKey);
-            var note = freed > 0 ? $", вытеснено записей: {freed}" : "";
+            var note = freed > 0 ? Loc.Str("Status.CacheEvicted", freed) : "";
 
-            UseCacheBackend(track, entry, $"{track.Letter}: кэш собран ({Size(entry.Bytes)}){note}");
+            UseCacheBackend(track, entry, Loc.Str("Status.CacheBuilt", track.Letter, Size(entry.Bytes), note));
         }
 
         StartQueuedBuild();
@@ -444,7 +445,7 @@ public partial class MainWindow
             track.Flyleaf.Open(entry.SourcePath);
             track.Flyleaf.SeekToFrame(frame);
 
-            Status($"{track.Letter}: кэш не подошёл ({res.Error}) — играю с исходника");
+            Status(Loc.Str("Status.CacheRejected", track.Letter, res.Error));
             UpdateState();
             RestoreMasterTime(masterTime);
             return;
@@ -518,7 +519,7 @@ public partial class MainWindow
         var res = track.Flyleaf.Open(source);
         if (!res.Success)
         {
-            Status($"{track.Letter}: не открылся исходник — {res.Error}");
+            Status(Loc.Str("Status.SourceFailed", track.Letter, res.Error));
             return;
         }
 
@@ -558,10 +559,10 @@ public partial class MainWindow
                 {
                     CancelBuild(track);
                     if (track.Backend is FrameCacheBackend)
-                        PlayFromSource(track, $"{track.Letter}: режим «никогда» — играю с исходника");
+                        PlayFromSource(track, Loc.Str("Status.CacheModeNever", track.Letter));
                 }
 
-                Status("кэш выключен: только прямой декод");
+                Status(Loc.Str("Status.CacheOff"));
                 break;
 
             default:
@@ -575,7 +576,7 @@ public partial class MainWindow
                     decided = true;
                 }
 
-                if (!decided) Status($"режим кэша: {ModeName(mode)}");
+                if (!decided) Status(Loc.Str("Status.CacheMode", ModeName(mode)));
                 break;
         }
     }
@@ -598,7 +599,7 @@ public partial class MainWindow
     {
         App.Settings.CacheFps = fps;
         App.Settings.Save();
-        Status($"частота прокси: {FpsName(fps)}");
+        Status(Loc.Str("Status.CacheFps", FpsName(fps)));
 
         if (App.Settings.CacheMode == FrameCacheMode.Never)
         {
@@ -613,7 +614,7 @@ public partial class MainWindow
             // Играющий прокси собран по старой частоте — сначала на исходник.
             var source = track.Media!.FilePath;
             if (track.Backend is FrameCacheBackend)
-                PlayFromSource(track, $"{track.Letter}: частота прокси {FpsName(fps)} — пересобираю кэш");
+                PlayFromSource(track, Loc.Str("Status.CacheFpsRebuild", track.Letter, FpsName(fps)));
 
             // Превью не пересматриваем: они сняты с исходника и от частоты прокси не зависят.
             track.CacheEntry = null;
@@ -627,7 +628,7 @@ public partial class MainWindow
         if (!track.IsOpen || track.BuildCts is not null) return;
 
         var source = track.Media!.FilePath;
-        PlayFromSource(track, $"{track.Letter}: пересобираю кэш — пока играю с исходника");
+        PlayFromSource(track, Loc.Str("Status.CacheRebuild", track.Letter));
 
         if (track.CacheKey is { } key)
         {
@@ -637,7 +638,7 @@ public partial class MainWindow
         else
         {
             try { track.CacheKey = CacheKey.For(source, ProxyCacheBuilder.Signature(App.Settings.CacheFps)); }
-            catch (Exception ex) { Status($"{track.Letter}: кэш недоступен — {ex.Message}"); return; }
+            catch (Exception ex) { Status(Loc.Str("Status.CacheError", track.Letter, ex.Message)); return; }
         }
 
         if (track.Flyleaf.Media is { } media) StartBuild(track, media);
@@ -648,7 +649,7 @@ public partial class MainWindow
         var track = SideTrack;
         if (track.Backend is not FrameCacheBackend) return;
 
-        PlayFromSource(track, $"{track.Letter}: играю с исходника — кэш остаётся на диске");
+        PlayFromSource(track, Loc.Str("Status.CacheUseSource", track.Letter));
         UpdateCachePanel();
     }
 
@@ -657,7 +658,7 @@ public partial class MainWindow
         if (_building is not { } track) return;
 
         CancelBuild(track);
-        Status($"{track.Letter}: отменяю сборку кэша…");
+        Status(Loc.Str("Status.CacheCancelling", track.Letter));
     }
 
     private void CacheOpenFolder_Click(object sender, RoutedEventArgs e)
@@ -669,7 +670,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            Status($"не открылась папка кэша: {ex.Message}");
+            Status(Loc.Str("Status.CacheFolderFailed", ex.Message));
         }
     }
 
@@ -688,8 +689,8 @@ public partial class MainWindow
         var removed = _cacheStore.Clear(keep);
 
         Status(removed > 0
-            ? $"кэш очищен: удалено записей — {removed}" + (keep.Length == 0 ? "" : ", кроме открытых файлов")
-            : "в кэше нечего удалять");
+            ? Loc.Str("Status.CacheCleared", removed, keep.Length == 0 ? "" : Loc.Str("Status.CacheClearedKept"))
+            : Loc.Str("Status.CacheNothingToClear"));
 
         UpdateCachePanel();
     }
@@ -752,22 +753,24 @@ public partial class MainWindow
         if (track.BuildCts is not null && track.Media is { FromCache: true })
         {
             // Уже играем из кэша, хотя он ещё достраивается.
-            label = $"{letter}кэш · сборка {track.BuildPercent:F0} %{Remaining(track)}";
+            label = Loc.Str("Badge.CacheBuilding", letter, $"{track.BuildPercent:F0}", Remaining(track));
             brush = "OkBrush";
         }
         else if (track.BuildCts is not null)
         {
-            label = $"{letter}сборка кэша {track.BuildPercent:F0} %{Remaining(track)}";
+            label = Loc.Str("Badge.Building", letter, $"{track.BuildPercent:F0}", Remaining(track));
             brush = "AccentBrush";
         }
         else if (ReferenceEquals(_queued, track))
         {
-            label = $"{letter}кэш в очереди";
+            label = Loc.Str("Badge.Queued", letter);
             brush = "MutedBrush";
         }
         else if (track.Media is { FromCache: true })
         {
-            label = track.CacheStepMs > 0 ? $"{letter}кэш · шаг {track.CacheStepMs:F0} мс" : $"{letter}кэш";
+            label = track.CacheStepMs > 0
+                ? Loc.Str("Badge.CacheStep", letter, $"{track.CacheStepMs:F0}")
+                : Loc.Str("Badge.Cache", letter);
             brush = "OkBrush";
         }
         else
@@ -800,10 +803,7 @@ public partial class MainWindow
         InfoProxyNote.Visibility = reduced ? Visibility.Visible : Visibility.Collapsed;
         if (!reduced) return;
 
-        InfoProxyNote.Text =
-            $"Кадры идут из прокси на {entry!.Fps:0.###} fps вместо {entry.SourceFps:0.###} fps исходника: " +
-            "номера кадров и их общее число относятся к прокси. Для покадрового соответствия " +
-            "выберите в «Кэш…» частоту «как в исходнике».";
+        InfoProxyNote.Text = Loc.Str("Info.ProxyNote", $"{entry!.Fps:0.###}", $"{entry.SourceFps:0.###}");
     }
 
     private void UpdateCachePanel()
@@ -812,27 +812,27 @@ public partial class MainWindow
         var open = track.IsOpen;
         var fromCache = track.Media is { FromCache: true };
 
-        CacheFileHeader.Text = $"Т Р Е К   {track.Letter}";
+        CacheFileHeader.Text = Loc.Str("Side.CacheTrack", track.Letter);
 
-        CacheFileMode.Text = !open ? "—"
-            : track.BuildCts is not null && fromCache ? "кэш, идёт сборка"
-            : track.BuildCts is not null ? "сборка"
-            : ReferenceEquals(_queued, track) ? "в очереди на сборку"
-            : fromCache ? "кэш"
-            : "прямой декод";
+        CacheFileMode.Text = !open ? "—" : Loc.Str(
+            track.BuildCts is not null && fromCache ? "Cache.StateBuildingCache"
+            : track.BuildCts is not null ? "Cache.StateBuilding"
+            : ReferenceEquals(_queued, track) ? "Cache.StateQueued"
+            : fromCache ? "Cache.StateCache"
+            : "Cache.StateDirect");
 
-        CacheFileStep.Text = !open ? "—"
-            : $"{(track.CacheStepMs > 0 ? $"{track.CacheStepMs:F0} мс" : "—")} / " +
-              $"{(track.SourceStepMs > 0 ? $"{track.SourceStepMs:F0} мс" : "—")}";
+        CacheFileStep.Text = !open ? "—" : Loc.Str("Cache.StepPair",
+            track.CacheStepMs > 0 ? Loc.Str("Cache.Ms", $"{track.CacheStepMs:F0}") : "—",
+            track.SourceStepMs > 0 ? Loc.Str("Cache.Ms", $"{track.SourceStepMs:F0}") : "—");
 
         var entry = track.CacheEntry;
-        CacheFileProxy.Text = entry is null ? "—" : $"{Size(entry.Bytes)} · {entry.Fps:0.###} fps";
+        CacheFileProxy.Text = entry is null ? "—" : Loc.Str("Cache.ProxyValue", Size(entry.Bytes), $"{entry.Fps:0.###}");
         CacheFileBuilt.Text = entry is null ? "—" : entry.CreatedUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
 
-        CacheFileAudio.Text = !open || !fromCache ? "—"
-            : track.Backend.HasAudio ? "есть"
-            : CacheBuiltWithoutAudio(track) ? "нет — соберите заново"
-            : "нет дорожки в исходнике";
+        CacheFileAudio.Text = !open || !fromCache ? "—" : Loc.Str(
+            track.Backend.HasAudio ? "Cache.AudioYes"
+            : CacheBuiltWithoutAudio(track) ? "Cache.AudioRebuild"
+            : "Cache.AudioNoSource");
 
         BtnRebuild.IsEnabled = open && track.BuildCts is null && App.Settings.CacheMode != FrameCacheMode.Never;
         BtnUseSource.IsEnabled = fromCache;
@@ -841,7 +841,7 @@ public partial class MainWindow
         var used = entries.Sum(x => x.Bytes);
         var limit = CacheLimitBytes;
 
-        CacheStorageText.Text = $"{Size(used)} / {App.Settings.CacheLimitGb:0.#} ГБ · записей: {entries.Count}";
+        CacheStorageText.Text = Loc.Str("Cache.Storage", Size(used), $"{App.Settings.CacheLimitGb:0.#}", entries.Count);
         CacheStorageBar.Value = limit > 0 ? Math.Clamp(used * 100.0 / limit, 0, 100) : 0;
     }
 
@@ -935,8 +935,8 @@ public partial class MainWindow
 
             if (!task.IsCanceled && task.Exception?.InnerException is not OperationCanceledException)
             {
-                Status($"{track.Letter}: превью кадров не сняты — " +
-                       $"{task.Exception?.InnerException?.Message ?? "неизвестная ошибка"}");
+                Status(Loc.Str("Status.ThumbsFailed", track.Letter,
+                    task.Exception?.InnerException?.Message ?? Loc.Str("Status.CacheUnknownError")));
                 return;
             }
 
@@ -1028,21 +1028,23 @@ public partial class MainWindow
     private static string Remaining(PlayerTrack track) => track.BuildEta.Length > 0 ? $" · ~{track.BuildEta}" : "";
 
     private static string FpsName(double fps) =>
-        fps > 0 ? $"{fps.ToString("0.###", CultureInfo.InvariantCulture)} кадров/с" : "как в исходнике";
+        fps > 0
+            ? Loc.Str("Cache.FpsValue", fps.ToString("0.###", CultureInfo.InvariantCulture))
+            : Loc.Str("Cache.FpsSource");
 
-    private static string ModeName(FrameCacheMode mode) => mode switch
+    private static string ModeName(FrameCacheMode mode) => Loc.Str(mode switch
     {
-        FrameCacheMode.Always => "всегда",
-        FrameCacheMode.Never => "никогда",
-        _ => "автоматически"
-    };
+        FrameCacheMode.Always => "Cache.ModeAlways",
+        FrameCacheMode.Never => "Cache.ModeNever",
+        _ => "Cache.ModeAuto"
+    });
 
     private static string Size(long bytes) => bytes switch
     {
-        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.#} ГБ",
-        >= 1L << 20 => $"{bytes / (double)(1L << 20):0} МБ",
-        >= 1L << 10 => $"{bytes / (double)(1L << 10):0} КБ",
-        _ => $"{bytes} Б"
+        >= 1L << 30 => Loc.Str("Units.Gb", $"{bytes / (double)(1L << 30):0.#}"),
+        >= 1L << 20 => Loc.Str("Units.Mb", $"{bytes / (double)(1L << 20):0}"),
+        >= 1L << 10 => Loc.Str("Units.Kb", $"{bytes / (double)(1L << 10):0}"),
+        _ => Loc.Str("Units.B", bytes)
     };
 
     private static string Eta(TimeSpan eta) =>

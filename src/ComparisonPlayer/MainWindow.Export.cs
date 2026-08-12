@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using ComparisonPlayer.Export;
+using ComparisonPlayer.Localization;
 using ComparisonPlayer.Tracks;
 
 namespace ComparisonPlayer;
@@ -25,7 +26,7 @@ public partial class MainWindow
 
         var item = new MenuItem
         {
-            Header = "Вырезать отрезок в файл…",
+            Header = Loc.Str("Menu.ExportSegment"),
             Icon = new Path
             {
                 Style = (Style)FindResource("MenuIcon"),

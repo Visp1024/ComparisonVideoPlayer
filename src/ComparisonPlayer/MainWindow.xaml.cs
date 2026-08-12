@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ComparisonPlayer.Chrome;
+using ComparisonPlayer.Localization;
 using ComparisonPlayer.Playback;
 using ComparisonPlayer.Timeline;
 using ComparisonPlayer.Tracks;
@@ -150,7 +151,7 @@ public partial class MainWindow : AppWindow
         // Коррекцию дрейфа видно в строке состояния: расхождение двух декодеров —
         // вещь, которую надо уметь проверить, а не принимать на веру.
         _sync.Corrected += (_, ms) => Dispatcher.BeginInvoke(() =>
-            Status($"ведомый трек подтянут: расхождение {ms:+0;-0} мс"));
+            Status(Loc.Str("Status.Corrected", $"{ms:+0;-0}")));
 
         // FlyleafHost выводит кадр в собственные окна (поверхность и накладка),
         // и когда фокус уходит туда, события клавиатуры до главного окна не доходят.
@@ -205,9 +206,7 @@ public partial class MainWindow : AppWindow
         // Накладка, масштаб кадра и звук расставлены по настройкам ещё до первой
         // отрисовки (PrepareFirstFrame): здесь их берут уже треки и движок.
         UpdateState();
-        Status(string.IsNullOrEmpty(AppEnv.FFmpegDir)
-            ? "FFmpeg не найден — открыть файл не получится"
-            : "файл не открыт");
+        Status(Loc.Str(string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "Badge.NoFFmpeg" : "Badge.NoFile"));
     }
 
     /// <summary>
@@ -456,9 +455,7 @@ public partial class MainWindow : AppWindow
         App.Settings.PauseOnSeek = MnuPauseOnSeek.IsChecked;
         App.Settings.Save();
 
-        Status(App.Settings.PauseOnSeek
-            ? "переход по таймлайну ставит на паузу"
-            : "переход по таймлайну не прерывает воспроизведение");
+        Status(Loc.Str(App.Settings.PauseOnSeek ? "Status.PauseOnSeekOn" : "Status.PauseOnSeekOff"));
     }
 
     private void File_Click(object sender, RoutedEventArgs e) => DropMenu(BtnFile);
@@ -604,7 +601,9 @@ public partial class MainWindow : AppWindow
     private void SwitchActiveTrack()
     {
         SetActiveTrack(_active == TrackId.A ? TrackId.B : TrackId.A);
-        Status($"активный трек: {Active.Letter}" + (Active.IsOpen ? $" — {Active.Media!.FileName}" : " (пуст)"));
+        Status(Loc.Str("Status.ActiveTrack", Active.Letter, Active.IsOpen
+            ? Loc.Str("Status.ActiveTrackFile", Active.Media!.FileName)
+            : Loc.Str("Status.ActiveTrackEmpty")));
     }
 
     private void SetActiveTrack(TrackId id)
@@ -639,14 +638,14 @@ public partial class MainWindow : AppWindow
 
         if (!track.IsOpen)
         {
-            Status($"трек {track.Letter} пуст — мастером его не сделать");
+            Status(Loc.Str("Status.MasterEmpty", track.Letter));
             UpdateTimelineButtons();
             return;
         }
 
         if (_sync.MasterId == id)
         {
-            Status($"трек {track.Letter} уже мастер: шаг меряется его кадрами");
+            Status(Loc.Str("Status.MasterAlready", track.Letter));
             return;
         }
 
@@ -656,8 +655,8 @@ public partial class MainWindow : AppWindow
 
         // Звук переехал вместе с мастером — об этом стоит сказать сразу, иначе
         // смена звучащего трека выглядит как самоволие плеера.
-        var audio = _sync.HasAudio && !_sync.Muted && _sync.Volume > 0 ? " и звук" : "";
-        Status($"мастер — трек {track.Letter}: шаг меряется его кадрами ({track.Fps:0.###} fps){audio}");
+        var audio = _sync.HasAudio && !_sync.Muted && _sync.Volume > 0 ? Loc.Str("Status.MasterAudio") : "";
+        Status(Loc.Str("Status.Master", track.Letter, $"{track.Fps:0.###}", audio));
     }
 
     /// <summary>
@@ -718,12 +717,12 @@ public partial class MainWindow : AppWindow
         _layout = mode;
 
         ApplyLayout();
-        Status(_layout switch
+        Status(Loc.Str(_layout switch
         {
-            LayoutMode.OnlyA => "показан только трек A (V)",
-            LayoutMode.OnlyB => "показан только трек B (V)",
-            _ => "кадры рядом (V)"
-        });
+            LayoutMode.OnlyA => "Status.LayoutOnlyA",
+            LayoutMode.OnlyB => "Status.LayoutOnlyB",
+            _ => "Status.LayoutSide"
+        }));
     }
 
     private void ApplyLayout() => ApplyLayout(_a.IsOpen, _b.IsOpen);
@@ -790,18 +789,18 @@ public partial class MainWindow : AppWindow
         ApplySideVisibility();
         InfoSection.Visibility = _side == SideMode.Info ? Visibility.Visible : Visibility.Collapsed;
         CacheSection.Visibility = _side == SideMode.Cache ? Visibility.Visible : Visibility.Collapsed;
-        SideTitle.Text = _side == SideMode.Cache ? "К Э Ш   К А Д Р О В" : "С В Е Д Е Н И Я";
+        SideTitle.Text = Loc.Str(_side == SideMode.Cache ? "Side.Cache" : "Side.Info");
 
         Highlight(BtnInfo, _side == SideMode.Info);
         Highlight(BtnCache, _side == SideMode.Cache);
 
         UpdateState();
-        Status(_side switch
+        Status(Loc.Str(_side switch
         {
-            SideMode.Info => "панель сведений открыта (Ctrl+I)",
-            SideMode.Cache => "панель кэша открыта (C)",
-            _ => "панель свёрнута"
-        });
+            SideMode.Info => "Status.SideInfo",
+            SideMode.Cache => "Status.SideCache",
+            _ => "Status.SideNone"
+        }));
     }
 
     /// <summary>
@@ -835,7 +834,7 @@ public partial class MainWindow : AppWindow
 
         ApplyOverlay();
         UpdatePosition();
-        Status(_showOsd ? "накладка над кадром включена (T)" : "накладка над кадром выключена (T)");
+        Status(Loc.Str(_showOsd ? "Status.OverlayOn" : "Status.OverlayOff"));
     }
 
     /// <summary>
@@ -860,8 +859,8 @@ public partial class MainWindow : AppWindow
     {
         var dlg = new OpenFileDialog
         {
-            Title = $"Открыть видео в трек {track.Letter}",
-            Filter = $"Видео|{string.Join(";", VideoExtensions.Select(x => "*" + x))}|Все файлы|*.*",
+            Title = Loc.Str("Open.Dialog", track.Letter),
+            Filter = Loc.Str("Open.Filter", string.Join(";", VideoExtensions.Select(x => "*" + x))),
             InitialDirectory = Directory.Exists(App.Settings.LastFolder) ? App.Settings.LastFolder : null
         };
 
@@ -912,8 +911,9 @@ public partial class MainWindow : AppWindow
 
         var m = track.Media!;
         if (!quiet)
-            Status($"{track.Letter}: открыт {m.FileName} — {m.Codec} {m.Width}×{m.Height}, {m.Fps:F3} fps" +
-                   (m.HardwareAcceleration ? ", аппаратный декод" : ", программный декод"));
+            Status(Loc.Str("Status.Opened", track.Letter, m.FileName, m.Codec, m.Width, m.Height,
+                m.Fps.ToString("F3", CultureInfo.InvariantCulture),
+                Loc.Str(m.HardwareAcceleration ? "Status.DecodeHardware" : "Status.DecodeSoftware")));
 
         UpdateState();
         SeekFrame(_sync.PositionFrame);
@@ -939,7 +939,7 @@ public partial class MainWindow : AppWindow
         track.Offset = TimeSpan.Zero;
 
         UpdateState();
-        Status($"{track.Letter}: закрыт {name}");
+        Status(Loc.Str("Status.Closed", track.Letter, name));
     }
 
     // ---------- ошибки открытия ----------
@@ -953,19 +953,18 @@ public partial class MainWindow : AppWindow
     {
         var (title, hint) = track.Id == TrackId.A ? (DropTitleA, DropHintA) : (DropTitleB, DropHintB);
         var name = Path.GetFileName(path);
-        var reason = string.IsNullOrWhiteSpace(error) ? "причина неизвестна" : error;
+        var reason = string.IsNullOrWhiteSpace(error) ? Loc.Str("Open.UnknownReason") : error;
 
         // Без FFmpeg не открывается ничего, и настоящая причина — именно он.
         if (string.IsNullOrEmpty(AppEnv.FFmpegDir))
-            reason += ". Библиотеки FFmpeg не найдены: задайте COMPARISONPLAYER_FFMPEG_DIR " +
-                      "или положите их в подкаталог FFmpeg рядом с программой";
+            reason += Loc.Str("Open.FFmpegHint");
 
-        title.Text = $"Не открылся {name}";
+        title.Text = Loc.Str("Stage.OpenFailed", name);
         title.Foreground = (Brush)FindResource("WarnBrush");
-        hint.Text = reason + " · перетащите сюда другой файл";
+        hint.Text = Loc.Str("Stage.OpenFailedHint", reason);
 
         UpdateState();
-        Status($"{track.Letter}: не открылся {name} — {reason}");
+        Status(Loc.Str("Status.OpenFailed", track.Letter, name, reason));
     }
 
     /// <summary>Вернуть панели трека обычное приглашение перетащить файл.</summary>
@@ -973,11 +972,9 @@ public partial class MainWindow : AppWindow
     {
         var (title, hint) = track.Id == TrackId.A ? (DropTitleA, DropHintA) : (DropTitleB, DropHintB);
 
-        title.Text = $"Трек {track.Letter} пуст";
+        title.Text = Loc.Str("Stage.TrackEmpty", track.Letter);
         title.Foreground = (Brush)FindResource("TextBrush");
-        hint.Text = track.Id == TrackId.A
-            ? "перетащите видео сюда · mp4, mkv, mov, avi, ts"
-            : "перетащите сюда второй ролик";
+        hint.Text = Loc.Str(track.Id == TrackId.A ? "Stage.DropHintA" : "Stage.DropHintB");
     }
 
     // ---------- перетаскивание файла ----------
@@ -1057,9 +1054,9 @@ public partial class MainWindow : AppWindow
             ? Color.FromArgb(0x33, 0xF2, 0xA1, 0x3C)
             : Color.FromArgb(0x33, 0x4E, 0xA3, 0xE0));
 
-        text.Text = track.IsOpen ? $"Заменить {track.Letter}"
-            : other.IsOpen ? $"Сравнить: открыть в {track.Letter}"
-            : $"Открыть в {track.Letter}";
+        text.Text = Loc.Str(track.IsOpen ? "Stage.DropReplace"
+            : other.IsOpen ? "Stage.DropCompare"
+            : "Stage.DropOpen", track.Letter);
 
         box.Visibility = Visibility.Visible;
     }
@@ -1082,8 +1079,9 @@ public partial class MainWindow : AppWindow
         // Сессию открываем как сессию: её файл тоже удобно бросать в окно.
         if (IsSessionFile(path))
         {
-            if (Session.Load(path) is { } session) ApplySession(session, $"сессия «{Path.GetFileNameWithoutExtension(path)}»");
-            else Status($"не прочитать сессию {Path.GetFileName(path)} — файл повреждён");
+            if (Session.Load(path) is { } session)
+                ApplySession(session, Loc.Str("Session.Title", Path.GetFileNameWithoutExtension(path)));
+            else Status(Loc.Str("Session.UnreadableShort", Path.GetFileName(path)));
             return;
         }
 
@@ -1111,20 +1109,20 @@ public partial class MainWindow : AppWindow
     /// </summary>
     private static (string? Path, string Error) DroppedVideo(DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return (null, "это не файл — перетащите видео");
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return (null, Loc.Str("Status.NotAFile"));
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files)
-            return (null, "не удалось прочитать перетаскиваемое");
+            return (null, Loc.Str("Status.DropUnreadable"));
 
         var path = files[0];
 
-        if (Directory.Exists(path)) return (null, "это папка — перетащите видеофайл");
-        if (!File.Exists(path)) return (null, $"файл не найден: {path}");
+        if (Directory.Exists(path)) return (null, Loc.Str("Status.DropFolder"));
+        if (!File.Exists(path)) return (null, Loc.Str("Status.DropMissing", path));
 
         if (path.EndsWith(Session.FileExtension, StringComparison.OrdinalIgnoreCase)) return (path, "");
 
         return VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)
             ? (path, "")
-            : (null, $"формат {Path.GetExtension(path)} не поддерживается — {string.Join(", ", VideoExtensions)}");
+            : (null, Loc.Str("Status.DropFormat", Path.GetExtension(path), string.Join(", ", VideoExtensions)));
     }
 
     // ---------- таймлайн ----------
@@ -1273,12 +1271,12 @@ public partial class MainWindow : AppWindow
     private string OffsetMessage()
     {
         var frames = _sync.RelativeOffsetFrames(_b);
-        if (frames == 0) return "треки совмещены: сдвиг 0";
+        if (frames == 0) return Loc.Str("Status.OffsetZero");
 
         var time = _sync.FrameTime(Math.Abs(frames));
         var sign = frames > 0 ? "+" : "−";
-        var who = frames > 0 ? "B отстаёт от A" : "B опережает A";
-        return $"сдвиг B: {sign}{Math.Abs(frames)} кадров ({time:mm\\:ss\\.fff}) — {who}";
+        var who = Loc.Str(frames > 0 ? "Status.OffsetBehind" : "Status.OffsetAhead");
+        return Loc.Str("Status.Offset", sign, Math.Abs(frames), $"{time:mm\\:ss\\.fff}", who);
     }
 
     // ---------- сдвиг: поле и клавиши ----------
@@ -1292,7 +1290,7 @@ public partial class MainWindow : AppWindow
     {
         if (!BothOpen())
         {
-            Status("сдвиг нужен, когда открыты оба трека");
+            Status(Loc.Str("Status.OffsetNeedsBoth"));
             return;
         }
 
@@ -1323,7 +1321,7 @@ public partial class MainWindow : AppWindow
         RefreshTimeline();
         ShowOffset();
         SeekFrame(_sync.PositionFrame);
-        Status("сдвиг сброшен: треки начинаются вместе");
+        Status(Loc.Str("Status.OffsetReset"));
     }
 
     private bool BothOpen() => _a.IsOpen && _b.IsOpen;
@@ -1357,7 +1355,7 @@ public partial class MainWindow : AppWindow
             return;
         }
 
-        Status($"непонятный сдвиг «{TxtOffset.Text}» — оставил прежний");
+        Status(Loc.Str("Status.OffsetBad", TxtOffset.Text));
         ShowOffset();
     }
 
@@ -1415,7 +1413,7 @@ public partial class MainWindow : AppWindow
             return;
         }
 
-        Status($"непонятная скорость «{TxtSpeed.Text}» — оставил {SpeedName(_speed)}");
+        Status(Loc.Str("Status.SpeedBad", TxtSpeed.Text, SpeedName(_speed)));
         ShowSpeed();
     }
 
@@ -1432,7 +1430,7 @@ public partial class MainWindow : AppWindow
         ShowSpeed();
         _sync.Speed = _speed;
 
-        if (changed) Status($"скорость воспроизведения: {SpeedName(clamped)}");
+        if (changed) Status(Loc.Str("Status.Speed", SpeedName(clamped)));
     }
 
     private void ShowSpeed()
@@ -1531,25 +1529,23 @@ public partial class MainWindow : AppWindow
         Highlight(BtnMuteMini, audible);
 
         TxtVolume.Text = TxtVolumeMini.Text = !isOpen ? "—"
-            : !hasAudio ? "нет"
-            : silent ? "выкл"
+            : !hasAudio ? Loc.Str("Audio.None")
+            : silent ? Loc.Str("Audio.Off")
             : $"{volume} %";
     }
 
     /// <summary>Что происходит со звуком — тем же языком, что и остальная строка состояния.</summary>
     private string AudioMessage()
     {
-        if (_sync.AudioTrack is not { } track) return "звук зазвучит, когда откроется трек";
+        if (_sync.AudioTrack is not { } track) return Loc.Str("Audio.WaitsForTrack");
 
         if (!_sync.HasAudio)
-            return CacheBuiltWithoutAudio(track)
-                ? $"у мастера {track.Letter} звука нет: кэш собран без дорожки — «Собрать заново» (C) вернёт её"
-                : $"у мастера {track.Letter} нет звуковой дорожки";
+            return Loc.Str(CacheBuiltWithoutAudio(track) ? "Audio.NoTrackInCache" : "Audio.NoTrack", track.Letter);
 
-        if (_sync.Muted) return "звук выключен (Ctrl+M)";
-        if (_sync.Volume == 0) return "громкость 0 % — тишина (Ctrl+↑ громче)";
+        if (_sync.Muted) return Loc.Str("Audio.Muted");
+        if (_sync.Volume == 0) return Loc.Str("Audio.Silent");
 
-        return $"звук с трека {track.Letter} · громкость {_sync.Volume} %";
+        return Loc.Str("Audio.Playing", track.Letter, _sync.Volume);
     }
 
     // ---------- зум, снэп, отрезок ----------
@@ -1578,7 +1574,7 @@ public partial class MainWindow : AppWindow
 
         Timeline.FitAll();
         UpdateZoomText();
-        Status("вся шкала в ширину окна (F)");
+        Status(Loc.Str("Status.Fit"));
     }
 
     private void ToggleSnap()
@@ -1586,7 +1582,7 @@ public partial class MainWindow : AppWindow
         Timeline.SnapEnabled = !Timeline.SnapEnabled;
         App.Settings.SnapToFrames = Timeline.SnapEnabled;
         UpdateTimelineButtons();
-        Status(Timeline.SnapEnabled ? "снэп включён (S)" : "снэп выключен (S)");
+        Status(Loc.Str(Timeline.SnapEnabled ? "Status.SnapOn" : "Status.SnapOff"));
     }
 
     private void ToggleLoop()
@@ -1594,7 +1590,7 @@ public partial class MainWindow : AppWindow
         _loop = !_loop;
         App.Settings.LoopSegment = _loop;
         UpdateTimelineButtons();
-        Status(_loop ? "петля по отрезку включена (Ctrl+L)" : "петля по отрезку выключена (Ctrl+L)");
+        Status(Loc.Str(_loop ? "Status.LoopOn" : "Status.LoopOff"));
     }
 
     // ---------- настройки ----------
@@ -1624,13 +1620,17 @@ public partial class MainWindow : AppWindow
         App.Settings = changed;
         App.Settings.Save();
 
+        // Язык — до пересборки подписей: привязки разметки обновятся сами, а всё, что
+        // расставлено кодом ниже, соберётся уже на новом языке.
+        Loc.Use(changed.Language);
+
         _showOsd = changed.ShowOverlay;
         ApplyOverlay();
         _loop = changed.LoopSegment;
         Timeline.SnapEnabled = changed.SnapToFrames;
         MnuPauseOnSeek.IsChecked = changed.PauseOnSeek;
 
-        RbAutoHint.Text = $"строить, если шаг назад медленнее {changed.StepBackThresholdMs} мс";
+        RbAutoHint.Text = Loc.Str("Cache.AutoHint", changed.StepBackThresholdMs);
 
         UpdateTimelineButtons();
         UpdatePosition();
@@ -1639,7 +1639,7 @@ public partial class MainWindow : AppWindow
         if (Math.Abs(cacheFps - App.Settings.CacheFps) > 0.001) ApplyCacheFps(cacheFps);
 
         InitCacheUi();
-        Status("настройки сохранены");
+        Status(Loc.Str("Status.SettingsSaved"));
     }
 
     /// <summary>Границы отрезка ставит активный трек — в его собственных кадрах.</summary>
@@ -1650,7 +1650,7 @@ public partial class MainWindow : AppWindow
         Active.SetIn(Math.Clamp(_sync.LocalFrame(Active, _sync.PositionFrame), 0, Active.LastFrame));
         RefreshTimeline();
         UpdateSegmentText();
-        Status($"{Active.Letter}: начало отрезка — кадр {Active.InFrame}");
+        Status(Loc.Str("Status.SegmentIn", Active.Letter, Active.InFrame));
     }
 
     private void SetSegmentOut()
@@ -1660,7 +1660,7 @@ public partial class MainWindow : AppWindow
         Active.SetOut(Math.Clamp(_sync.LocalFrame(Active, _sync.PositionFrame), 0, Active.LastFrame));
         RefreshTimeline();
         UpdateSegmentText();
-        Status($"{Active.Letter}: конец отрезка — кадр {Active.OutFrame}");
+        Status(Loc.Str("Status.SegmentOut", Active.Letter, Active.OutFrame));
     }
 
     private void ResetSegment() => ResetSegment(Active);
@@ -1672,7 +1672,7 @@ public partial class MainWindow : AppWindow
         track.ResetSegment();
         RefreshTimeline();
         UpdateSegmentText();
-        Status($"{track.Letter}: отрезок сброшен на весь ролик");
+        Status(Loc.Str("Status.SegmentReset", track.Letter));
     }
 
     /// <summary>
@@ -1695,7 +1695,7 @@ public partial class MainWindow : AppWindow
         StopShuttle();
         _sync.Pause();
         SeekFrame(_sync.SegmentOutFrame);
-        Status($"конец отрезка (кадр {_sync.SegmentOutFrame}) — петля выключена (Ctrl+L)");
+        Status(Loc.Str("Status.SegmentEnd", _sync.SegmentOutFrame));
     }
 
     private void UpdateTimelineButtons()
@@ -1735,7 +1735,7 @@ public partial class MainWindow : AppWindow
         }
 
         var ratio = Timeline.ZoomRatio;
-        TxtZoom.Text = ratio < 1.05 ? "вся шкала" : $"1 : {ratio:0.#}";
+        TxtZoom.Text = ratio < 1.05 ? Loc.Str("Timeline.ZoomAll") : Loc.Str("Timeline.ZoomRatio", $"{ratio:0.#}");
     }
 
     private void UpdateSegmentText()
@@ -1748,14 +1748,14 @@ public partial class MainWindow : AppWindow
 
         if (Active.IsFullSegment)
         {
-            TxtSegment.Text = $"{Active.Letter}: отрезок — весь ролик";
+            TxtSegment.Text = Loc.Str("Timeline.SegmentWhole", Active.Letter);
             return;
         }
 
         var from = Active.TimeOf(Active.InFrame);
         var to = Active.TimeOf(Active.OutFrame);
-        TxtSegment.Text =
-            $"{Active.Letter}: отрезок {ShortTimecode(from)} – {ShortTimecode(to)} · {Active.SegmentFrames} кадров";
+        TxtSegment.Text = Loc.Str("Timeline.Segment", Active.Letter,
+            ShortTimecode(from), ShortTimecode(to), Active.SegmentFrames);
     }
 
     // ---------- переходы ----------
@@ -1828,7 +1828,7 @@ public partial class MainWindow : AppWindow
             // Может статься, что кадр уже дописан — перечитываем файл, и только
             // если его действительно ещё нет, возвращаемся на исходник.
             if (frame >= ExtendPartialCache(track, cache))
-                PlayFromSource(track, $"{track.Letter}: кадр {frame} ещё не в кэше — играю с исходника");
+                PlayFromSource(track, Loc.Str("Status.CacheFrameMissing", track.Letter, frame));
         }
 
         track.Backend.SeekToFrame(frame);
@@ -1955,22 +1955,23 @@ public partial class MainWindow : AppWindow
         InfoDuration.Text = open ? Timecode(m!.Duration) : "—";
         InfoFrames.Text = open ? m!.FrameCount.ToString() : "—";
 
-        InfoSource.Text = !open ? "—" : m!.FromCache ? "кэша" : "исходника";
+        InfoSource.Text = !open ? "—" : Loc.Str(m!.FromCache ? "Info.SourceCache" : "Info.SourceFile");
         InfoSource.Foreground = (Brush)FindResource(open && m!.FromCache ? "OkBrush" : "TextBrush");
 
         var master = _sync.Master is { } mt && ReferenceEquals(mt, track);
         var offset = BothOpen() ? _sync.RelativeOffsetFrames(track) : 0;
         InfoRole.Text = !open ? "—"
-            : master ? "мастер"
-            : offset == 0 ? "ведомый"
-            : $"ведомый, сдвиг {(offset > 0 ? "+" : "")}{offset}";
+            : master ? Loc.Str("Info.RoleMaster")
+            : offset == 0 ? Loc.Str("Info.RoleSlave")
+            : Loc.Str("Info.RoleSlaveOffset", $"{(offset > 0 ? "+" : "")}{offset}");
 
         var sounds = _sync.AudioTrack is { } audio && ReferenceEquals(audio, track);
         InfoAudio.Text = !open ? "—"
-            : !track.Backend.HasAudio ? (CacheBuiltWithoutAudio(track) ? "нет — кэш без звука" : "нет дорожки")
-            : !sounds ? "есть, приглушён (ведомый)"
-            : _sync.Muted || _sync.Volume == 0 ? "есть, выключен (Ctrl+M)"
-            : $"звучит · {_sync.Volume} %";
+            : !track.Backend.HasAudio
+                ? Loc.Str(CacheBuiltWithoutAudio(track) ? "Info.AudioNoCache" : "Info.AudioNone")
+            : !sounds ? Loc.Str("Info.AudioMutedSlave")
+            : _sync.Muted || _sync.Volume == 0 ? Loc.Str("Info.AudioMuted")
+            : Loc.Str("Info.AudioPlaying", _sync.Volume);
 
         UpdateProxyNote(track);
 
@@ -2038,7 +2039,7 @@ public partial class MainWindow : AppWindow
             : $"{letter}—";
 
         osd.Text = _showOsd && frame is { } shown
-            ? $"кадр {approx}{shown} · {Timecode(track.TimeOf(shown))}"
+            ? Loc.Str("Osd.Frame", approx, shown, Timecode(track.TimeOf(shown)))
             : "";
 
         var isMaster = _sync.Master is { } master && ReferenceEquals(master, track);
@@ -2048,8 +2049,8 @@ public partial class MainWindow : AppWindow
         var sounds = isMaster && _sync.HasAudio && !_sync.Muted && _sync.Volume > 0;
 
         role.Text = isMaster
-            ? $"мастер · {track.Fps:0.###} fps" + (sounds ? " · звук" : "")
-            : $"{(offset > 0 ? "+" : "")}{offset} кадров · {track.Fps:0.###} fps";
+            ? Loc.Str("Osd.Master", $"{track.Fps:0.###}") + (sounds ? Loc.Str("Osd.MasterAudio") : "")
+            : Loc.Str("Osd.Offset", $"{(offset > 0 ? "+" : "")}{offset}", $"{track.Fps:0.###}");
 
         // Вне материала (или вне отрезка) кадра нет: показываем это прямо,
         // а не замораживаем крайний кадр — в покадровом сравнении это обман.
@@ -2058,9 +2059,8 @@ public partial class MainWindow : AppWindow
         if (frame is null)
         {
             var local = _sync.LocalFrame(track, _sync.PositionFrame);
-            noFrameHint.Text = local < track.InFrame
-                ? $"материал {track.Letter} начинается позже"
-                : $"материал {track.Letter} здесь уже кончился";
+            noFrameHint.Text = Loc.Str(
+                local < track.InFrame ? "Stage.NoFrameLater" : "Stage.NoFrameEnded", track.Letter);
         }
     }
 

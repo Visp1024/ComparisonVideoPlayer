@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using ComparisonPlayer.Chrome;
+using ComparisonPlayer.Localization;
 using FlyleafLib;
 
 namespace ComparisonPlayer;
@@ -35,6 +36,10 @@ public partial class App : Application
         StartupFileB = files.Skip(1).FirstOrDefault();
         Directory.CreateDirectory(AppEnv.DataDir);
         Settings = Settings.Load();
+
+        // Язык — раньше первого окна: мастер установки FFmpeg открывается прямо отсюда,
+        // и подписи ему нужны уже готовыми.
+        Loc.Use(Settings.Language);
 
         // Уборка журналов прошлых запусков к появлению окна отношения не имеет —
         // держать на ней холодный старт незачем (задача #31).
@@ -83,16 +88,13 @@ public partial class App : Application
         {
             // Подсказку про FFmpeg показываем, только если каталог библиотек и правда негоден:
             // раньше она стояла в любом отказе и уводила от настоящей причины.
-            var message = $"Не удалось запустить движок воспроизведения.\n\n{ex.Message}";
+            var message = Loc.Str("App.EngineFailed", ex.Message);
             string? detail = null;
             if (!AppEnv.FFmpegLooksUsable)
             {
-                message +=
-                    "\n\nУкажите каталог библиотек FFmpeg переменной окружения COMPARISONPLAYER_FFMPEG_DIR " +
-                    "или положите их в подкаталог FFmpeg рядом с программой.\n\n" +
-                    "Предложение скачать готовый комплект появится снова при следующем запуске.";
-                detail = "Библиотеки ожидались в каталоге: " +
-                         (string.IsNullOrEmpty(AppEnv.FFmpegDir) ? "(не найден)" : AppEnv.FFmpegDir);
+                message += Loc.Str("App.EngineFFmpegHint");
+                detail = Loc.Str("App.EngineFFmpegDetail",
+                    string.IsNullOrEmpty(AppEnv.FFmpegDir) ? Loc.Str("App.FFmpegDirNotFound") : AppEnv.FFmpegDir);
             }
 
             MessageDialog.Show(owner, "CVP", message, detail);

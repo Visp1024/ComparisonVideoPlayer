@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer.Timeline;
 
@@ -908,7 +909,8 @@ public sealed class TimelineControl : FrameworkElement
 
         var sign = _clipDragTotal > 0 ? "+" : "";
         var time = FrameTime(Math.Abs(_clipDragTotal));
-        var text = Text($"◂ сдвиг {sign}{_clipDragTotal} кадров · {time:mm\\:ss\\.fff} ▸", 11.5, Accent);
+        var text = Text(
+            Loc.Str("Timeline.ClipDrag", $"{sign}{_clipDragTotal}", $"{time:mm\\:ss\\.fff}"), 11.5, Accent);
 
         var x = Math.Clamp(clip.Left + (clip.Width - text.Width) / 2, 4, Math.Max(ActualWidth - text.Width - 4, 4));
         dc.DrawText(text, new Point(x, clip.Top + (clip.Height - text.Height) / 2));

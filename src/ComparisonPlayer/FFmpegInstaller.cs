@@ -1,6 +1,7 @@
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer;
 
@@ -83,7 +84,7 @@ public static class FFmpegInstaller
 
         if (!AppEnv.FFmpegLooksUsableIn(target))
             throw new InvalidOperationException(
-                $"в архиве не нашлось библиотек avcodec — каталог {target} остался непригодным");
+                Loc.Str("FFmpeg.NoAvcodec", target));
 
         AppEnv.UseFFmpegDir(target);
         return target;

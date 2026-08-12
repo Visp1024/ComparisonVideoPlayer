@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using ComparisonPlayer.Chrome;
+using ComparisonPlayer.Localization;
 using ComparisonPlayer.Remote;
 
 namespace ComparisonPlayer;
@@ -52,10 +53,10 @@ public partial class RemoteWindow : AppWindow
 
         (TxtState.Text, var brush) = clients switch
         {
-            null => ("выключено", "DimBrush"),
-            0 => ("ждёт подключения", "WarnBrush"),
-            1 => ("подключён клиент", "OkBrush"),
-            var n => ($"подключено клиентов: {n}", "OkBrush")
+            null => (Loc.Str("Remote.StateOff"), "DimBrush"),
+            0 => (Loc.Str("Remote.StateWaiting"), "WarnBrush"),
+            1 => (Loc.Str("Remote.StateOneClient"), "OkBrush"),
+            var n => (Loc.Str("Remote.StateClients", n), "OkBrush")
         };
 
         TxtState.Foreground = (Brush)FindResource(brush);

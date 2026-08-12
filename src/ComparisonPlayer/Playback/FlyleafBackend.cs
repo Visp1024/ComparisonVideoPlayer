@@ -5,6 +5,7 @@ using Flyleaf.FFmpeg;
 using FlyleafLib;
 using FlyleafLib.MediaFramework.MediaStream;
 using FlyleafLib.MediaPlayer;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer.Playback;
 
@@ -140,17 +141,17 @@ public sealed class FlyleafBackend : IPlaybackBackend
     public OpenResult Open(string path)
     {
         if (!File.Exists(path))
-            return OpenResult.Fail($"файл не найден: {path}");
+            return OpenResult.Fail(Loc.Str("Open.NotFound", path));
 
         var res = _player.Open(path);
         if (!res.Success)
-            return OpenResult.Fail(string.IsNullOrWhiteSpace(res.Error) ? "формат не поддерживается" : res.Error);
+            return OpenResult.Fail(string.IsNullOrWhiteSpace(res.Error) ? Loc.Str("Open.Unsupported") : res.Error);
 
         var stream = SelectedVideoStream();
         if (stream is null)
         {
             _player.Stop();
-            return OpenResult.Fail("в файле нет видеодорожки");
+            return OpenResult.Fail(Loc.Str("Open.NoVideoStream"));
         }
 
         _media = Describe(path, stream);

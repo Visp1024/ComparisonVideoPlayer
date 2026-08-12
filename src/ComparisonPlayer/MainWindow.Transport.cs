@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using ComparisonPlayer.Localization;
 using TimelineControl = ComparisonPlayer.Timeline.TimelineControl;
 
 namespace ComparisonPlayer;
@@ -44,7 +45,7 @@ public partial class MainWindow
     {
         if (!_sync.IsOpen)
         {
-            Status("шаттл (J/K/L) работает, когда открыт хотя бы один трек");
+            Status(Loc.Str("Status.ShuttleNeedsTrack"));
             return;
         }
 
@@ -57,7 +58,7 @@ public partial class MainWindow
         // нажатие L каждый раз возвращало бы скорость к 1×.
         if (!_sync.IsPlaying) PlayFromHere();
 
-        Status($"шаттл вперёд {SpeedName(_shuttle)} (L) — K останавливает");
+        Status(Loc.Str("Status.ShuttleFwd", SpeedName(_shuttle)));
     }
 
     /// <summary>Разогнать шаттл назад (J): воспроизведения назад нет, отступаем шагами.</summary>
@@ -65,7 +66,7 @@ public partial class MainWindow
     {
         if (!_sync.IsOpen)
         {
-            Status("шаттл (J/K/L) работает, когда открыт хотя бы один трек");
+            Status(Loc.Str("Status.ShuttleNeedsTrack"));
             return;
         }
 
@@ -74,9 +75,8 @@ public partial class MainWindow
 
         StartReverse();
 
-        Status(_sync.OpenTracks.All(IsFastSource)
-            ? $"шаттл назад {SpeedName(-_shuttle)} (J) — K останавливает"
-            : $"шаттл назад {SpeedName(-_shuttle)} (J) — источник медленный, кадры пропускаются");
+        Status(Loc.Str(_sync.OpenTracks.All(IsFastSource) ? "Status.ShuttleBack" : "Status.ShuttleBackSlow",
+            SpeedName(-_shuttle)));
     }
 
     /// <summary>Остановить шаттл и воспроизведение (K).</summary>
@@ -88,7 +88,7 @@ public partial class MainWindow
         _sync.Pause();
         SetSpeed(1);
 
-        if (wasShuttling) Status("шаттл остановлен (K)");
+        if (wasShuttling) Status(Loc.Str("Status.ShuttleStopped"));
     }
 
     /// <summary>Сбросить шаттл, не трогая воспроизведение: любое другое действие транспорта.</summary>
@@ -155,7 +155,7 @@ public partial class MainWindow
 
             StopShuttle();
             SeekFrame(start);
-            Status($"начало отрезка (кадр {start}) — шаттл остановлен");
+            Status(Loc.Str("Status.SegmentStart", start));
             return;
         }
 
@@ -190,7 +190,7 @@ public partial class MainWindow
 
         if (!_sync.IsOpen)
         {
-            Status("прокрутка колесом листает кадры — сначала откройте файл");
+            Status(Loc.Str("Status.WheelNeedsFile"));
             return;
         }
 

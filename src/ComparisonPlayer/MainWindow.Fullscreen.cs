@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using ComparisonPlayer.Localization;
 
 namespace ComparisonPlayer;
 
@@ -116,7 +117,7 @@ public partial class MainWindow
 
         ApplyFullScreen();
         ShowFsBar();
-        Status("во весь экран: двиньте мышью — выедет полоса; выход — F11 или Esc");
+        Status(Loc.Str("Status.FullscreenOn"));
     }
 
     private void LeaveFullScreen()
@@ -129,7 +130,7 @@ public partial class MainWindow
         ExitFullScreen();
 
         ApplyFullScreen();
-        Status("обычный вид (F11)");
+        Status(Loc.Str("Status.FullscreenOff"));
     }
 
     /// <summary>
