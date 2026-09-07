@@ -24,7 +24,7 @@
   "Setup.Title": "FFmpeg not found — CVP",
   "Setup.Caption": "FFmpeg not found",
   "Setup.Head": "FFmpeg libraries were not found",
-  "Setup.Intro": "Without them the player cannot open a single file: both decoding and frame cache building rely on them. You can download a ready-made bundle (BtbN build, n7.1 win64 gpl shared) and put it next to the program.",
+  "Setup.Intro": "Without them the player cannot open a single file: both decoding and frame cache building rely on them. You can download a ready-made bundle (BtbN build, n9.0 win64 gpl shared) and put it next to the program.",
   "Setup.DirLabel": "Folder:",
   "Setup.Download": "Download (~{0} MB)",
   "Setup.Once": "The download happens once: after that the player takes the libraries from this folder.",

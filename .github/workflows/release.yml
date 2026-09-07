@@ -45,13 +45,13 @@ jobs:
           "value=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "версия: $v"
 
-      # Тот же комплект FFmpeg (n7.1 win64 gpl shared), что плеер предлагает
+      # Тот же комплект FFmpeg (n9.0 win64 gpl shared), что плеер предлагает
       # скачать сам — src/ComparisonPlayer/FFmpegInstaller.cs; ссылки держим
-      # одинаковыми. Взят снимок с датой, а не latest: ветку 7.1 у BtbN собирать
-      # перестали, и под latest файла с этим именем больше нет.
-      - name: FFmpeg (n7.1 win64 gpl shared)
+      # одинаковыми. Ветку выбирает не вкус, а FlyleafLib: 3.11.3 прибит к
+      # Flyleaf.FFmpeg.Bindings 9.0.0, значит и комплект нужен девятый.
+      - name: FFmpeg (n9.0 win64 gpl shared)
         run: |
-          $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-win64-gpl-shared-7.1.zip'
+          $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-shared-9.0.zip'
           $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg.zip'
           $dir = Join-Path $env:RUNNER_TEMP 'ffmpeg'
           Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing

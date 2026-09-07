@@ -43,7 +43,7 @@ if (-not (Test-Path -LiteralPath $project)) { throw "не найден прое�
 if (-not $OutDir) { $OutDir = Join-Path $root "publish\$Runtime" }
 
 # Каталог FFmpeg: явный ключ -> переменные окружения приложения -> tools\ffmpeg\bin в
-# репозитории (в git не хранится, распаковывается из ffmpeg-n7.1-*-win64-gpl-shared).
+# репозитории (в git не хранится, распаковывается из ffmpeg-n9.0-*-win64-gpl-shared).
 if (-not $NoFFmpeg -and -not $FFmpegDir) {
     # @(...) вокруг результата обязательно: один найденный путь иначе станет строкой,
     # и [0] вернёт первый символ вместо каталога.

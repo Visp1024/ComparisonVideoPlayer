@@ -26,18 +26,17 @@ public readonly record struct FFmpegInstallProgress(FFmpegInstallStage Stage, lo
 public static class FFmpegInstaller
 {
     /// <summary>
-    /// Сборка BtbN: тот же комплект (n7.1, win64, gpl, shared), под который собран
-    /// FlyleafLib 3.10.4 и который кладёт в поставку tools/publish.ps1. Ссылка ведёт
-    /// на снимок с датой, а не на latest: ветку 7.1 у BtbN собирать перестали, и под
-    /// latest файла с этим именем больше нет — прежняя ссылка отдавала 404. Снимок
-    /// же остаётся на месте. Менять его придётся вместе с версией FlyleafLib: та
-    /// прибита к своим биндингам FFmpeg (сейчас Flyleaf.FFmpeg.Bindings 7.1.1).
+    /// Сборка BtbN: тот же комплект (n9.0, win64, gpl, shared), под который собран
+    /// FlyleafLib 3.11.3 и который кладёт в поставку tools/publish.ps1. Ссылка снова
+    /// ведёт на скользящий latest: ветку 9.0 у BtbN собирают, и файл с этим именем
+    /// под latest обновляется сам. Менять её придётся вместе с версией FlyleafLib:
+    /// та прибита к своим биндингам FFmpeg (сейчас Flyleaf.FFmpeg.Bindings 9.0.0).
     /// </summary>
     public const string DownloadUrl =
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-win64-gpl-shared-7.1.zip";
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-shared-9.0.zip";
 
     /// <summary>Примерный размер архива — показываем до начала загрузки, чтобы решение было осознанным.</summary>
-    public const int ApproxDownloadMb = 68;
+    public const int ApproxDownloadMb = 73;
 
     /// <summary>
     /// Куда положим библиотеки. «Рядом с программой» — подкаталог FFmpeg возле exe: там их
@@ -63,7 +62,7 @@ public static class FFmpegInstaller
         var targetExisted = Directory.Exists(target);
         Directory.CreateDirectory(target);
 
-        // Архив качаем во временный файл, а не в память: 68 МБ в байтовом массиве ради
+        // Архив качаем во временный файл, а не в память: 73 МБ в байтовом массиве ради
         // одной распаковки — лишний расход, да и ZipFile читает с диска потоково.
         var temp = Path.Combine(Path.GetTempPath(), $"cvp-ffmpeg-{Environment.ProcessId}.zip");
 
@@ -123,7 +122,7 @@ public static class FFmpegInstaller
             await file.WriteAsync(buffer.AsMemory(0, read), cancel);
             done += read;
 
-            // Отчитываемся не на каждый блок: 68 МБ по 64 КБ — это тысяча с лишним
+            // Отчитываемся не на каждый блок: 73 МБ по 64 КБ — это тысяча с лишним
             // обновлений окна, полосе хватает шага в четверть мегабайта.
             if (done - lastReport < 256 * 1024 && done != total) continue;
             lastReport = done;
