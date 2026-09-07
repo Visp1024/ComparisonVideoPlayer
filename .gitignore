@@ -12,3 +12,5 @@ publish/
 docs/*
 !docs/screenshot.png
 !docs/app-icon.svg
+# Метка рабочей копии пула, её кладёт доска Makestead — в репозитории ей делать нечего.
+.kanban-slot
