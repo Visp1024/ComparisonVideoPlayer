@@ -10,6 +10,7 @@
 
   "App.EngineFailed": "Could not start the playback engine.\n\n{0}",
   "App.EngineFFmpegHint": "\n\nPoint to the FFmpeg library folder with the COMPARISONPLAYER_FFMPEG_DIR environment variable, or put the libraries into an FFmpeg subfolder next to the program.\n\nThe offer to download a ready-made bundle will appear again on the next start.",
+  "App.EngineRestartNeeded": "FFmpeg libraries are installed. Start the player again — the playback engine is started once per run.",
   "App.EngineFFmpegDetail": "The libraries were expected in: {0}",
   "App.FFmpegDirNotFound": "(not found)",
 
@@ -25,6 +26,11 @@
   "Setup.Caption": "FFmpeg not found",
   "Setup.Head": "FFmpeg libraries were not found",
   "Setup.Intro": "Without them the player cannot open a single file: both decoding and frame cache building rely on them. You can download a ready-made bundle (BtbN build, n9.0 win64 gpl shared) and put it next to the program.",
+  "Setup.TitleOutdated": "FFmpeg bundle does not fit — CVP",
+  "Setup.CaptionOutdated": "FFmpeg bundle does not fit",
+  "Setup.HeadOutdated": "FFmpeg libraries are of a different version",
+  "Setup.IntroOutdated": "The folder {0} holds an FFmpeg bundle from another branch — the player is built against n9.0 and the engine will not start with it. You can download a matching bundle (BtbN build, n9.0 win64 gpl shared) and put it next to the program.",
+  "Setup.Update": "Update (~{0} MB)",
   "Setup.DirLabel": "Folder:",
   "Setup.Download": "Download (~{0} MB)",
   "Setup.Once": "The download happens once: after that the player takes the libraries from this folder.",

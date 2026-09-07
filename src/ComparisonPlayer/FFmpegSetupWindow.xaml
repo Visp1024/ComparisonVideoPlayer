@@ -18,13 +18,13 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <chrome:TitleBar Grid.Row="0" ShowResizeButtons="False" Caption="{loc:Str Setup.Caption}" />
+        <chrome:TitleBar Grid.Row="0" x:Name="WindowTitleBar" ShowResizeButtons="False" Caption="{loc:Str Setup.Caption}" />
 
         <StackPanel Grid.Row="1" Margin="18,16,18,14">
-            <TextBlock Text="{loc:Str Setup.Head}"
+            <TextBlock x:Name="TxtHead" Text="{loc:Str Setup.Head}"
                        FontSize="17" FontWeight="SemiBold" Margin="0,0,0,10" />
 
-            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"
+            <TextBlock x:Name="TxtIntro" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}"
                        FontSize="13.5" Margin="0,0,0,12"
                        Text="{loc:Str Setup.Intro}" />
 

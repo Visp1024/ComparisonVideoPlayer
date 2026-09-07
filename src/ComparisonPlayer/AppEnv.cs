@@ -9,14 +9,21 @@ namespace ComparisonPlayer;
 /// </summary>
 public static class AppEnv
 {
-    private static string _ffmpegDir =
-        Environment.GetEnvironmentVariable("COMPARISONPLAYER_FFMPEG_DIR")
-        ?? Environment.GetEnvironmentVariable("SPIKE_FFMPEG_DIR")
-        ?? Probe(
-            Path.Combine(AppContext.BaseDirectory, "FFmpeg"),
-            RepoFFmpegDir(),
-            @"C:\ffmpeg\bin")
-        ?? "";
+    /// <summary>
+    /// Где ищем библиотеки, в порядке предпочтения: явное указание переменной окружения,
+    /// подкаталог рядом с программой (туда кладёт комплект загрузчик), каталог репозитория
+    /// для запуска из bin/Debug и общее место на машине.
+    /// </summary>
+    private static string?[] Candidates() =>
+    [
+        Environment.GetEnvironmentVariable("COMPARISONPLAYER_FFMPEG_DIR"),
+        Environment.GetEnvironmentVariable("SPIKE_FFMPEG_DIR"),
+        Path.Combine(AppContext.BaseDirectory, "FFmpeg"),
+        RepoFFmpegDir(),
+        @"C:\ffmpeg\bin"
+    ];
+
+    private static string _ffmpegDir = Probe(Candidates());
 
     /// <summary>Каталог нативных библиотек FFmpeg (avcodec, avformat и прочие).</summary>
     public static string FFmpegDir => _ffmpegDir;
@@ -72,7 +79,35 @@ public static class AppEnv
     {
         try
         {
+            return dir.Length > 0 && File.Exists(Path.Combine(dir, RequiredAvcodec));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Библиотека avcodec той версии, под которую собран плеер. Проверяем именно её, а не
+    /// «хоть какой-нибудь avcodec»: FlyleafLib прибит к своим биндингам FFmpeg (сейчас
+    /// Flyleaf.FFmpeg.Bindings 9.0.0), и комплект другой ветки движок не поднимет. По маске
+    /// с любым номером каталог со старым комплектом выглядел годным, окно установки не
+    /// показывалось, а запуск падал на Engine.Start без единой подсказки, что делать.
+    /// Меняется вместе с версией FlyleafLib — вслед за <see cref="FFmpegInstaller.DownloadUrl"/>.
+    /// </summary>
+    public const string RequiredAvcodec = "avcodec-63.dll";
+
+    /// <summary>
+    /// В каталоге лежит комплект FFmpeg другой версии: библиотеки есть, но не те. От «нет
+    /// вовсе» это стоит отличать ради разговора с человеком: «FFmpeg не найден» про полный
+    /// каталог выглядит как ошибка программы, а не как повод обновить комплект.
+    /// </summary>
+    public static bool FFmpegWrongVersionIn(string dir)
+    {
+        try
+        {
             return dir.Length > 0
+                && !FFmpegLooksUsableIn(dir)
                 && Directory.EnumerateFiles(dir, "avcodec-*.dll").Any();
         }
         catch (Exception)
@@ -80,6 +115,9 @@ public static class AppEnv
             return false;
         }
     }
+
+    /// <summary>Найденный комплект — не той версии (см. <see cref="FFmpegWrongVersionIn"/>).</summary>
+    public static bool FFmpegWrongVersion => FFmpegWrongVersionIn(_ffmpegDir);
 
     /// <summary>
     /// Каталог пользовательских данных приложения: настройки, журнал движка.
@@ -140,6 +178,18 @@ public static class AppEnv
     /// <summary>Запомненные замеры скорости шага назад, чтобы не мерить один файл дважды.</summary>
     public static string ProbeFile => Path.Combine(DataDir, "probes.json");
 
-    private static string? Probe(params string?[] candidates)
-        => candidates.FirstOrDefault(c => c is not null && Directory.Exists(c));
+    /// <summary>
+    /// Первый каталог с годным комплектом. Годного нет — отдаём первый существующий: по нему
+    /// видно, что человек уже указал переменной окружения или положил рядом с программой, и
+    /// именно про этот каталог пойдёт разговор в окне установки. Пусто — не нашли ничего.
+    /// </summary>
+    private static string Probe(string?[] candidates)
+    {
+        var existing = candidates
+            .Where(c => !string.IsNullOrEmpty(c) && Directory.Exists(c))
+            .Select(c => c!)
+            .ToList();
+
+        return existing.FirstOrDefault(FFmpegLooksUsableIn) ?? existing.FirstOrDefault() ?? "";
+    }
 }

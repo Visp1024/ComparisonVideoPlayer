@@ -22,12 +22,24 @@ public partial class FFmpegSetupWindow : AppWindow
     /// <summary>Каталог, куда легли библиотеки. Заполняется только при успехе.</summary>
     public string? InstalledDir { get; private set; }
 
-    public FFmpegSetupWindow()
+    /// <param name="outdated">
+    /// Комплект в найденном каталоге есть, но не той версии (<see cref="AppEnv.FFmpegWrongVersion"/>).
+    /// Разговор тогда другой: не «библиотек нет», а «эти не подойдут, нужен комплект под текущую
+    /// сборку плеера» — иначе предложение скачать FFmpeg на полном каталоге выглядит нелепо.
+    /// </param>
+    public FFmpegSetupWindow(bool outdated = false)
     {
         InitializeComponent();
         TxtTarget.Text = FFmpegInstaller.TargetDir;
-        BtnInstall.Content = Loc.Str("Setup.Download", FFmpegInstaller.ApproxDownloadMb);
+        BtnInstall.Content = Loc.Str(outdated ? "Setup.Update" : "Setup.Download", FFmpegInstaller.ApproxDownloadMb);
         TxtStatus.Text = Loc.Str("Setup.Once");
+
+        if (!outdated) return;
+
+        Title = Loc.Str("Setup.TitleOutdated");
+        WindowTitleBar.Caption = Loc.Str("Setup.CaptionOutdated");
+        TxtHead.Text = Loc.Str("Setup.HeadOutdated");
+        TxtIntro.Text = Loc.Str("Setup.IntroOutdated", AppEnv.FFmpegDir);
     }
 
     private bool Busy => _cancel is not null;

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using ComparisonPlayer.Chrome;
@@ -46,8 +47,10 @@ public partial class App : Application
         Task.Run(AppEnv.CleanupEngineLogs);
         StartupTrace.Mark("settings");
 
-        // Библиотек нет — предлагаем скачать их до старта движка. Иначе Engine.Start
-        // упадёт и единственным выходом останется идти за сборкой FFmpeg руками.
+        // Годных библиотек нет — предлагаем скачать их до старта движка. Иначе Engine.Start
+        // упадёт и единственным выходом останется идти за сборкой FFmpeg руками. Сюда же
+        // попадает комплект другой версии (переезд на FFmpeg 9.0, задача #55): каталог полон,
+        // но движок его не поднимет, и человеку нужно ровно то же — обновить комплект.
         // Отказ ничего не ломает: запуск продолжится прежним путём, с прежней ошибкой.
         if (!AppEnv.FFmpegLooksUsable)
         {
@@ -55,7 +58,7 @@ public partial class App : Application
             // «закрылось последнее окно» и погасило бы приложение целиком.
             var shutdownMode = ShutdownMode;
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            new FFmpegSetupWindow().ShowDialog();
+            new FFmpegSetupWindow(AppEnv.FFmpegWrongVersion).ShowDialog();
             ShutdownMode = shutdownMode;
         }
 
@@ -86,6 +89,29 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+            // Каталог библиотек негоден — движок не поднять ничем, кроме подходящего
+            // комплекта, поэтому не хороним запуск ошибкой, а предлагаем его поставить
+            // прямо здесь. Ставится — перезапускаемся: второй Engine.Start в том же
+            // процессе движок не воскрешает (после неудачного он остаётся полуживым и
+            // валит уже создание Config), а перезапуск начинает всё с чистого листа.
+            var installed = false;
+            if (!AppEnv.FFmpegLooksUsable)
+            {
+                var setup = new FFmpegSetupWindow(AppEnv.FFmpegWrongVersion) { Owner = owner };
+                setup.ShowDialog();
+                installed = setup.InstalledDir is not null;
+                if (installed && Restart()) return false;
+            }
+
+            // Библиотеки поставлены, а перезапуститься не вышло — говорим ровно это:
+            // прежняя ошибка движка тут уже неверна, чинить человеку больше нечего.
+            if (installed)
+            {
+                MessageDialog.Show(owner, "CVP", Loc.Str("App.EngineRestartNeeded"), null);
+                Current.Shutdown();
+                return false;
+            }
+
             // Подсказку про FFmpeg показываем, только если каталог библиотек и правда негоден:
             // раньше она стояла в любом отказе и уводила от настоящей причины.
             var message = Loc.Str("App.EngineFailed", ex.Message);
@@ -99,6 +125,33 @@ public partial class App : Application
 
             MessageDialog.Show(owner, "CVP", message, detail);
             Current.Shutdown(1);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Перезапустить плеер с теми же файлами. Нужен после установки библиотек в уже упавшем
+    /// запуске: движок FlyleafLib поднимается ровно один раз за процесс. Не вышло запустить
+    /// себя заново (запрет политики, exe переехал) — возвращаем false, и вызывающий покажет
+    /// прежнюю ошибку: пользователь просто откроет плеер сам, библиотеки уже на месте.
+    /// </summary>
+    private static bool Restart()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (exe is null) return false;
+
+            var start = new ProcessStartInfo(exe) { UseShellExecute = false };
+            if (StartupFile is { } file) start.ArgumentList.Add(file);
+            if (StartupFileB is { } second) start.ArgumentList.Add(second);
+
+            Process.Start(start);
+            Current.Shutdown();
+            return true;
+        }
+        catch (Exception)
+        {
             return false;
         }
     }
