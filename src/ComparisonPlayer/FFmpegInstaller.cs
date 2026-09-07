@@ -27,11 +27,14 @@ public static class FFmpegInstaller
 {
     /// <summary>
     /// Сборка BtbN: тот же комплект (n7.1, win64, gpl, shared), под который собран
-    /// FlyleafLib 3.10.4 и который кладёт в поставку tools/publish.ps1. Тег latest у этого
-    /// релиза постоянный — файл под ним обновляется, ссылка не протухает.
+    /// FlyleafLib 3.10.4 и который кладёт в поставку tools/publish.ps1. Ссылка ведёт
+    /// на снимок с датой, а не на latest: ветку 7.1 у BtbN собирать перестали, и под
+    /// latest файла с этим именем больше нет — прежняя ссылка отдавала 404. Снимок
+    /// же остаётся на месте. Менять его придётся вместе с версией FlyleafLib: та
+    /// прибита к своим биндингам FFmpeg (сейчас Flyleaf.FFmpeg.Bindings 7.1.1).
     /// </summary>
     public const string DownloadUrl =
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip";
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-31-14-10/ffmpeg-n7.1.5-12-g1fdbca85aa-win64-gpl-shared-7.1.zip";
 
     /// <summary>Примерный размер архива — показываем до начала загрузки, чтобы решение было осознанным.</summary>
     public const int ApproxDownloadMb = 68;
